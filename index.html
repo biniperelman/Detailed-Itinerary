@@ -3,372 +3,488 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cape Town Operations Dashboard</title>
+    <title>Gap Year Itinerary Dashboard</title>
+    <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Inter', sans-serif; }
-        /* Adjusted background color slightly darker to help contrast in some environments */
-        #app { background-color: #f9fafb; } 
-        .timeline-container { position: relative; }
-        .timeline-item { border-left: 4px solid #e5e7eb; padding-left: 1.5rem; margin-left: 10px; }
-        .timeline-dot { 
-            position: absolute; 
-            left: 0; 
-            transform: translateX(-50%); 
-            top: 0; 
-            z-index: 10;
-            transition: all 0.2s;
+        /* Custom styles for better aesthetics and fixed chat box */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f7f7;
+            padding-bottom: 200px; /* Space for the fixed chat box */
         }
-        .dot-green { background-color: #10b981; }
-        .task-complete .timeline-dot { background-color: #10b981; }
-        .task-complete .task-title { text-decoration: line-through; color: #9ca3af; }
-
-        .day-btn.active {
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.06);
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem 1rem;
+        }
+        .tab-button.active {
+            background-color: #10b981; /* Emerald 500 */
+            color: white;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
             transform: translateY(-1px);
         }
-
-        @media (max-width: 1024px) {
-            #day-selector {
-                flex-wrap: nowrap;
-                overflow-x: auto;
-                padding-bottom: 0.5rem; 
-                -webkit-overflow-scrolling: touch;
-            }
-            .day-btn {
-                flex-shrink: 0; 
-                min-width: 130px;
-                text-align: center;
-            }
+        .activity-table th {
+            background-color: #f3f4f6;
+        }
+        .activity-table tr:nth-child(even) {
+            background-color: #f9fafb;
+        }
+        .chat-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 90%;
+            max-width: 400px;
+            background: white;
+            border-radius: 1.5rem;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+            z-index: 1000;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            max-height: 80vh;
+        }
+        .chat-messages {
+            flex-grow: 1;
+            padding: 1rem;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+        .chat-input-area {
+            padding: 1rem;
+            border-top: 1px solid #e5e7eb;
+            display: flex;
+            align-items: center;
+        }
+        .message-bubble {
+            max-width: 85%;
+            padding: 0.5rem 1rem;
+            border-radius: 1rem;
+            word-wrap: break-word;
+        }
+        .user-message {
+            align-self: flex-end;
+            background-color: #3b82f6; /* Blue 500 */
+            color: white;
+            border-bottom-right-radius: 0.25rem;
+        }
+        .gemini-message {
+            align-self: flex-start;
+            background-color: #d1fae5; /* Green 100 */
+            color: #065f46; /* Green 800 */
+            border-bottom-left-radius: 0.25rem;
+        }
+        .gemini-source {
+            font-size: 0.75rem;
+            color: #6b7280;
+            margin-top: 0.5rem;
+            padding-left: 0.5rem;
+            border-left: 2px solid #a7f3d0;
         }
     </style>
 </head>
-<body class="text-gray-800">
+<body class="bg-gray-50">
 
-    <div id="app" class="min-h-screen flex flex-col">
+<div id="loadingIndicator" class="fixed inset-0 bg-white bg-opacity-75 flex items-center justify-center z-50">
+    <div class="flex flex-col items-center">
+        <div class="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-emerald-500"></div>
+        <p class="mt-4 text-emerald-600 font-semibold">Loading Itinerary Data...</p>
+    </div>
+</div>
 
-        <!-- Fixed Header: Key Operational Context -->
-        <header class="bg-white shadow-md sticky top-0 z-10">
-            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex justify-between items-center flex-wrap">
-                <h1 class="text-xl font-bold text-gray-800">
-                    <span class="text-orange-600">CT</span> Operations Dashboard
-                </h1>
-                <div class="flex items-center space-x-4 text-xs sm:text-sm font-medium mt-2 sm:mt-0">
-                    <span class="flex items-center text-gray-600">
-                        👥 Group Size: <span class="ml-1 font-semibold text-gray-800">32</span>
-                    </span>
-                    <span class="flex items-center text-gray-600">
-                        🚌 Transport: <span class="ml-1 font-semibold text-gray-800">Ubers / 3 Shuttles</span>
-                    </span>
-                </div>
-            </div>
-        </header>
+<div class="container">
+    <header class="text-center mb-10 p-6 bg-white shadow-lg rounded-xl">
+        <h1 class="text-4xl font-extrabold text-gray-800">Gap Year UK Itinerary</h1>
+        <p class="text-lg text-gray-500 mt-2">Interactive Daily Schedule & Logistics</p>
+    </header>
 
-        <!-- Main Content Layout -->
-        <div class="flex-grow max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 md:py-10 lg:flex lg:space-x-8">
-
-            <!-- Sidebar Navigation -->
-            <nav class="lg:w-1/5 mb-8 lg:mb-0">
-                <h2 class="text-lg font-semibold mb-3 text-gray-700 hidden lg:block">Select Day</h2>
-                <div id="day-selector" class="flex flex-row lg:flex-col gap-2">
-                    <button data-day="tuesday" class="day-btn w-auto flex-shrink-0 lg:w-full text-left px-4 py-2 rounded-lg bg-gray-200 text-gray-700 font-medium hover:bg-gray-300 transition">
-                        Tuesday, Nov 18
-                    </button>
-                    <button data-day="wednesday" class="day-btn w-auto flex-shrink-0 lg:w-full text-left px-4 py-2 rounded-lg bg-gray-200 text-gray-700 font-medium hover:bg-gray-300 transition">
-                        Wednesday, Nov 19
-                    </button>
-                    <button data-day="thursday" class="day-btn w-auto flex-shrink-0 lg:w-full text-left px-4 py-2 rounded-lg bg-gray-200 text-gray-700 font-medium hover:bg-gray-300 transition">
-                        Thursday, Nov 20
-                    </button>
-                    <button data-day="friday" class="day-btn w-auto flex-shrink-0 lg:w-full text-left px-4 py-2 rounded-lg bg-gray-200 text-gray-700 font-medium hover:bg-gray-300 transition">
-                        Friday, Nov 21
-                    </button>
-                </div>
-            </nav>
-
-            <!-- Dynamic Content Area -->
-            <main id="schedule-display" class="lg:w-4/5 bg-white p-6 md:p-8 rounded-lg shadow-xl">
-                
-                <!-- Day content sections -->
-                <div id="tuesday-content" class="day-content hidden">
-                     <h2 class="text-3xl font-bold text-gray-800 mb-2">
-                        Tuesday: Table Mountain & City Logistics
-                    </h2>
-                    <p class="text-sm text-gray-500 mb-8 border-b pb-4">
-                        **Operations Brief:** High reliance on rapid UberXL requests (6 Ubers needed simultaneously). Must check Cableway status before leaving the Centre.
-                    </p>
-                    <div id="tuesday-timeline" class="timeline-container space-y-8"></div>
-                </div>
-
-                <div id="wednesday-content" class="day-content hidden">
-                    <h2 class="text-3xl font-bold text-gray-800 mb-2">
-                        Wednesday: The Peninsula Drive & Seal Island
-                    </h2>
-                    <p class="text-sm text-gray-500 mb-8 border-b pb-4">
-                        **Operations Brief:** Critical timing for Hout Bay boat trip (12:00 PM boarding) and **R4,160 cash payment**. Need to manage shuttle loading/unloading efficiently.
-                    </p>
-                    <div id="wednesday-timeline" class="timeline-container space-y-8"></div>
-                </div>
-
-                <div id="thursday-content" class="day-content hidden">
-                     <h2 class="text-3xl font-bold text-gray-800 mb-2">
-                        Thursday: Sea Point Fun Day
-                    </h2>
-                    <p class="text-sm text-gray-500 mb-8 border-b pb-4">
-                        **Operations Brief:** Bike/Kayaking activities require pre-booking. Lunch is **self-catered** near Sea Point shops.
-                    </p>
-                    <div id="thursday-timeline" class="timeline-container space-y-8"></div>
-                </div>
-
-                <div id="friday-content" class="day-content hidden">
-                     <h2 class="text-3xl font-bold text-gray-800 mb-2">
-                        Friday: Beach Chill & Big Shabbat Prep
-                    </h2>
-                    <p class="text-sm text-gray-500 mb-8 border-b pb-4">
-                        **Operations Brief:** Focus on relaxation and preparation for the large Shabbat dinner tonight (70+ expected guests). High-priority logistics for the Shabbat dinner setup.
-                    </p>
-                    <div id="friday-timeline" class="timeline-container space-y-8"></div>
-                </div>
-
-            </main>
-        </div>
+    <div id="tabs-container" class="flex flex-wrap justify-center gap-2 mb-8 p-4 bg-white rounded-xl shadow-md">
+        <!-- Tabs will be rendered here -->
     </div>
 
-    <script>
-        // --- ITINERARY DATA BASED ON UPLOADED CSV FILES ---
-        const ITINERARY_DATA = {
-            tuesday: {
-                date: "Tuesday, November 18th",
-                title: "Table Mountain & City Logistics",
-                tasks: [
-                    { time: "07:45", activity: "Wake Up & Prep", location: "All Accommodations", logistics: "Staff ensures all 32 people are ready to depart exactly by 8:30 AM.", actions: [] },
-                    { time: "08:30", activity: "Boys DEPART for Breakfast", location: "Boys Hotel (18 people)", logistics: "ACTION: 3 staff request **3 UberXLs simultaneously**. Risk: Drivers may cancel due to group size. Girls walk to the Centre (7 min walk).", actions: [{ type: "call", label: "Request Ubers (3XL)", value: "tel:" }] },
-                    { time: "08:45-09:35", activity: "Breakfast & Pack Lunch", location: "Ohrsom Centre", logistics: "**LUNCH MUST BE PACKED** and ready to go before 9:35 AM. Staff confirms all 32 people present.", actions: [{ type: "check", label: "Packed Lunch Confirmed" }] },
-                    { time: "09:35", activity: "DEPART for Table Mountain", location: "Ohrsom Centre", logistics: "CRITICAL: **6 UberXLs simultaneously** (6 staff requesting). Time-critical trip due to Cableway queues.", actions: [{ type: "call", label: "Request Ubers (6XL)", value: "tel:" }] },
-                    { time: "10:00-13:00", activity: "Table Mountain & Exploration", location: "Cableway", logistics: "Staff to maintain a headcount (32 people). Confirm the Cableway is open **before** leaving the Centre.", actions: [{ type: "info", label: "Check Cableway Status", value: "Website" }] },
-                    { time: "13:00-13:30", activity: "Eat Packed Lunch", location: "Table Mountain", logistics: "Eating on the mountain saves travel time.", actions: [] },
-                    { time: "13:30-14:00", activity: "Head Down the Mountain", location: "Cableway Base", logistics: "ACTION: **Repeat 6 UberXL Request**. Staff should lead the group to a clearly marked, quiet pickup zone.", actions: [{ type: "call", label: "Request Ubers (6XL)", value: "tel:" }] },
-                    { time: "14:30-16:30", activity: "V&A Waterfront Explore", location: "V&A Waterfront", logistics: "Walk around and explore. High-demand area, expect delays and potential surge pricing.", actions: [{ type: "map", label: "V&A Maps", value: "https://maps.app.goo.gl/example" }] },
-                    { time: "16:30", activity: "DEPART for Hotels", location: "V&A Waterfront", logistics: "ACTION: **Repeat 6 UberXL Request**. Ubers split the group back to their respective hotels.", actions: [{ type: "call", label: "Request Ubers (6XL)", value: "tel:" }] },
-                    { time: "17:00-18:40", activity: "Downtime", location: "Accommodations", logistics: "Time to rest.", actions: [] },
-                    { time: "18:40", activity: "DEPART for Dinner", location: "Hotels", logistics: "Boys: 3 UberXLs at 6:40 PM. Girls: Walk to Centre (7 min walk).", actions: [{ type: "call", label: "Request Ubers (3XL boys only)", value: "tel:" }] },
-                    { time: "19:00-20:00", activity: "Dinner (Accelerator) & Shiur", location: "Ohrsom Centre", logistics: "Dinner booked for 32 people. Shiur with R.Cannon (20:00-20:45).", actions: [] },
-                    { time: "20:45", activity: "DEPART for Hotels (Final)", location: "Ohrsom Centre", logistics: "ACTION: Final **6 UberXL Request** back to hotels. Late night demand might be lower.", actions: [{ type: "call", label: "Request Ubers (6XL)", value: "tel:" }] },
-                ]
-            },
-            wednesday: {
-                date: "Wednesday, November 19th",
-                title: "The Peninsula Drive & Seal Island",
-                tasks: [
-                    { time: "07:45", activity: "Wake Up & Prep", location: "All Accommodations", logistics: "Staff ensures everyone is organized for a full-day excursion.", actions: [] },
-                    { time: "08:30", activity: "Boys DEPART for Centre", location: "Boys Hotel (18 people)", logistics: "ACTION: **3 UberXLs at 8:30 AM SHARP**. 3 staff members must request Ubers simultaneously.", actions: [{ type: "call", label: "Request Ubers (3XL)", value: "tel:" }] },
-                    { time: "08:45", activity: "Girls Walk to Centre", location: "Girls Hotel (14 people)", logistics: "Girls walk (approx 7 min) to the Ohrsom Centre.", actions: [{ type: "map", label: "Centre Location", value: "https://maps.app.goo.gl/example" }] },
-                    { time: "09:00-09:45", activity: "Breakfast & Pack Lunch", location: "Ohrsom Centre", logistics: "MANDATORY: All 32 people must be at the Centre. **LUNCH MUST BE PACKED** before 10:00 AM.", actions: [{ type: "check", label: "Packed Lunch Confirmed" }] },
-                    { time: "10:00", activity: "DEPART for Hout Bay", location: "Ohrsom Centre", logistics: "ACTION: Load **3 pre-booked shuttles** precisely at 10:00 AM.", actions: [{ type: "call", label: "Call Shuttle Contact", value: "tel:" }] },
-                    { time: "10:45 AM", activity: "Arrive Hout Bay Harbour", location: "Hout Bay", logistics: "CRITICAL: Gava contacts Nautical Charters and pays **R4,160 total (R130 per person)**.", actions: [{ type: "payment", label: "CONFIRM PAYMENT: R4,160 Cash" }] },
-                    { time: "11:00-12:00", activity: "Harbour Exploration", location: "Hout Bay Harbour", logistics: "Free time for students. **MUST BE BACK** at the dock by 12:00 PM SHARP.", actions: [{ type: "timer", label: "Start 60 Min Timer" }] },
-                    { time: "12:00-13:00", activity: "Seal Island Boat Trip", location: "Hout Bay Dock & Water", logistics: "Board the boat at 12:00 PM. 45-minute trip. Shuttles wait at the harbour.", actions: [] },
-                    { time: "13:00-15:00", activity: "Chapman's Peak Drive & Views", location: "Hout Bay to Simon's Town", logistics: "Scenic drive. Allow for a quick photo stop (Chapman's Peak is a toll road).", actions: [{ type: "map", label: "Map: Chapmans Peak Route", value: "https://maps.app.goo.gl/example" }] },
-                    { time: "15:00-18:00", activity: "Boulders Beach, Lunch, & Chill", location: "Boulders Beach", logistics: "Lunch is eaten here. Gava must pay entrance for everyone. Enjoy the beach and penguins.", actions: [{ type: "check", label: "Entrance Paid" }] },
-                    { time: "18:00-19:00", activity: "Simon's Town Shops (Optional)", location: "Simon's Town", logistics: "Optional free time. Keep a **strict timeline for a 7:00 PM departure**.", actions: [{ type: "timer", label: "Start 60 Min Timer" }] },
-                    { time: "19:00", activity: "DEPART for Sea Point", location: "Simon's Town", logistics: "ACTION: All **3 SHUTTLES** depart back to the Ohrsom Centre.", actions: [] },
-                    { time: "20:00-21:00", activity: "Dinner at Centre", location: "Ohrsom Centre", logistics: "Dinner must be prepared for 32 people.", actions: [] },
-                    { time: "21:00", activity: "DEPART for Hotels (Final)", location: "Ohrsom Centre", logistics: "ACTION: Request **6 UberXLs** simultaneously to split the group back to their respective hotels for the night.", actions: [{ type: "call", label: "Request Ubers (6XL)", value: "tel:" }] },
-                ]
-            },
-            thursday: {
-                date: "Thursday, November 20th",
-                title: "Sea Point Fun Day",
-                tasks: [
-                    { time: "08:00", activity: "Wake Up & Prep", location: "Accommodations", logistics: "Slightly later wake-up time. Casual day planned.", actions: [] },
-                    { time: "08:45", activity: "Boys DEPART for Centre", location: "Boys Hotel (18 people)", logistics: "ACTION: 3 UberXLs simultaneously. Girls walk to the Centre.", actions: [{ type: "call", label: "Request Ubers (3XL)", value: "tel:" }] },
-                    { time: "09:15-10:00", activity: "Breakfast & Planning", location: "Ohrsom Centre", logistics: "Standard breakfast. Staff reviews Sea Point plan.", actions: [] },
-                    { time: "10:00-13:00", activity: "Promenade Activity", location: "Sea Point Promenade", logistics: "**Bike Ride or Scooter Promenade** followed by **Kayaking Trip**. Needs pre-booking confirmation.", actions: [{ type: "check", label: "Confirm Activity Booking" }] },
-                    { time: "13:00-14:00", activity: "Lunch (Self-Catering)", location: "Sea Point Shops", logistics: "Students purchase lunch from local kosher shops (Mojo Market area). Staff monitors spending.", actions: [{ type: "payment", label: "Monitor Student Lunch Spend" }] },
-                    { time: "14:00-16:00", activity: "Downtime & Activity Choice", location: "Sea Point Area", logistics: "Option 1: Relax at the Centre. Option 2: Browse Mojo Market / Sea Point shops.", actions: [{ type: "check", label: "Confirm Activity Split" }] },
-                    { time: "16:00-18:00", activity: "Shiur / Learning Session", location: "Ohrsom Centre", logistics: "Scheduled learning time.", actions: [] },
-                    { time: "18:00-19:30", activity: "Prep & Downtime", location: "Accommodations", logistics: "Group returns to hotels to prep for dinner out. Boys need 3 Ubers.", actions: [{ type: "call", label: "Request Ubers (3XL boys only)", value: "tel:" }] },
-                    { time: "19:30 PM", activity: "DEPART for Dinner Out", location: "Hotels", logistics: "ACTION: 6 UberXLs needed for transport to the restaurant. Girls walk, Boys Uber.", actions: [{ type: "call", label: "Request Ubers (6XL)", value: "tel:" }] },
-                    { time: "20:00 PM", activity: "Dinner Out at Press", location: "City Restaurant (The Press)", logistics: "Dinner booked for 32 people. Must confirm booking.", actions: [{ type: "check", label: "Confirm Restaurant Booking" }] },
-                    { time: "21:30 PM", activity: "DEPART for Hotels (Final)", location: "Restaurant", logistics: "ACTION: Final **6 UberXL Request** back to hotels.", actions: [{ type: "call", label: "Request Ubers (6XL)", value: "tel:" }] },
-                ]
-            },
-            friday: {
-                date: "Friday, November 21st",
-                title: "Beach Chill & Big Shabbat Prep",
-                tasks: [
-                    { time: "08:30", activity: "Wake Up & Prep", location: "Accommodations", logistics: "Staff ensures all 32 people are ready for beach day.", actions: [] },
-                    { time: "09:15", activity: "Group Walk to Breakfast", location: "Hotels", logistics: "Girls and Boys walk to the Ohrsom Centre together.", actions: [{ type: "map", label: "Centre Location", value: "https://maps.app.goo.gl/example" }] },
-                    { time: "09:30-10:15", activity: "Breakfast & Shabbat Brief", location: "Ohrsom Centre", logistics: "Briefing on Shabbat logistics and host family coordination.", actions: [{ type: "check", label: "Shabbat Host List Confirmed" }] },
-                    { time: "10:15", activity: "DEPART for Clifton/Camps Bay Beach", location: "Ohrsom Centre", logistics: "ACTION: 6 UberXLs needed for transport to the beach.", actions: [{ type: "call", label: "Request Ubers (6XL)", value: "tel:" }] },
-                    { time: "10:45-13:45", activity: "Beach Time & Free Play", location: "Clifton/Camps Bay", logistics: "Staff monitors group closely. Sunscreen and hydration mandatory.", actions: [{ type: "timer", label: "Set 3-Hour Beach Timer" }] },
-                    { time: "13:45", activity: "DEPART for Lunch (Centre)", location: "Clifton/Camps Bay", logistics: "ACTION: 6 UberXLs to return to the Ohrsom Centre for lunch.", actions: [{ type: "call", label: "Request Ubers (6XL)", value: "tel:" }] },
-                    { time: "14:15-15:00", activity: "Lunch at Centre", location: "Ohrsom Centre", logistics: "Light, quick lunch to maximize prep time.", actions: [] },
-                    { time: "15:00-16:30", activity: "Shabbat Dinner Setup", location: "Ohrsom Centre", logistics: "Staff and students help set up tables and chairs for the BIG Shabbat Dinner (70+ expected guests).", actions: [{ type: "check", label: "Venue Setup Complete" }] },
-                    { time: "16:30-18:15", activity: "Shabbat Prep & Downtime", location: "Accommodations", logistics: "Group returns to hotels to shower, dress, and prepare for Shabbat. Boys need 3 Ubers.", actions: [{ type: "call", label: "Request Ubers (3XL boys only)", value: "tel:" }] },
-                    { time: "18:15", activity: "DEPART for Centre (Shabbat)", location: "Hotels", logistics: "ACTION: Final **6 UberXLs** needed to bring everyone back to the Centre before Shabbat.", actions: [{ type: "call", label: "Request Ubers (6XL)", value: "tel:" }] },
-                    { time: "18:45", activity: "Shabbat Candle Lighting & Mincha", location: "Ohrsom Centre", logistics: "Candle lighting time is 18:55. Must be ready.", actions: [{ type: "info", label: "Candle Lighting Time: 18:55" }] },
-                    { time: "19:30 PM", activity: "BIG Shabbat Dinner!", location: "Ohrsom Centre", logistics: "Dinner for 70+ people (Group + Local Students). Confirm Guest Headcount.", actions: [{ type: "check", label: "Confirm Guest Headcount" }] },
-                ]
-            }
-        };
+    <div id="content-container" class="bg-white p-6 rounded-xl shadow-lg">
+        <!-- Table content will be rendered here -->
+    </div>
+</div>
 
-        const STATE = {
-            // Default to Tuesday as the logical starting day, but if it was already set, keep the state
-            activeDay: localStorage.getItem('activeDay') || 'tuesday', 
-            completionStatus: JSON.parse(localStorage.getItem('itineraryStatus')) || {}
-        };
+<!-- Gemini Chat Box -->
+<div id="chat-box" class="chat-container">
+    <!-- Chat Header -->
+    <div id="chat-header" class="p-4 bg-emerald-500 text-white flex justify-between items-center rounded-t-xl cursor-pointer">
+        <h3 class="text-xl font-bold">Itinerary Assistant (Gemini)</h3>
+        <button id="toggle-chat-btn" class="text-2xl font-bold p-1 leading-none rounded-full hover:bg-emerald-400">&times;</button>
+    </div>
 
-        function saveState() {
-            localStorage.setItem('itineraryStatus', JSON.stringify(STATE.completionStatus));
-            localStorage.setItem('activeDay', STATE.activeDay);
-        }
+    <!-- Chat Messages -->
+    <div id="chat-messages" class="chat-messages h-64" style="display: none;">
+        <!-- Initial Welcome Message -->
+        <div class="message-bubble gemini-message">
+            Hello! I'm your Itinerary Assistant. Ask me anything about your schedule, logistics, or general travel questions.
+        </div>
+        <!-- Messages will be appended here -->
+    </div>
 
-        function createTimelineItem(day, task, index) {
-            const isCompleted = STATE.completionStatus[`${day}-${index}`] === true;
-            const itemDiv = document.createElement('div');
-            itemDiv.className = `timeline-item relative pb-8 ${isCompleted ? 'task-complete' : ''}`;
-            itemDiv.dataset.taskId = `${day}-${index}`;
+    <!-- Chat Input -->
+    <div id="chat-input-area" class="chat-input-area" style="display: none;">
+        <input type="text" id="chat-input" placeholder="Ask about the itinerary or UK travel..."
+               class="flex-grow p-3 border border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 mr-2 shadow-inner">
+        <button id="send-btn"
+                class="bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-3 px-4 rounded-lg transition duration-200 shadow-md flex items-center disabled:opacity-50">
+            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 00.183.69l.006.006A1 1 0 003 18h14a1 1 0 00.894-1.447l-7-14z"></path></svg>
+        </button>
+    </div>
+</div>
 
-            const iconClass = isCompleted ? 'dot-green' : 'bg-gray-300';
+<script type="module">
+    // Firebase imports are included even if not strictly used for this feature, 
+    // to maintain the standard environment structure for authentication.
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-            itemDiv.innerHTML = `
-                <div class="timeline-dot w-5 h-5 rounded-full ${iconClass} border-4 border-white transition duration-200"></div>
-                <div class="flex flex-col md:flex-row md:items-start md:justify-between">
-                    <div class="md:w-3/4">
-                        <p class="text-sm font-semibold text-gray-500">${task.time}</p>
-                        <h3 class="task-title text-xl font-bold ${isCompleted ? 'text-gray-400' : 'text-gray-800'} mb-1 transition duration-200">${task.activity}</h3>
-                        <p class="text-sm text-orange-600 font-medium mb-2">${task.location}</p>
-                        <p class="text-base text-gray-600">${task.logistics}</p>
-                    </div>
-                    <div class="md:w-1/4 mt-4 md:mt-0 md:pl-4 space-y-2">
-                        ${task.actions.map(action => {
-                            const btnColor = action.type === 'payment' ? 'bg-red-600 hover:bg-red-700' : action.type === 'call' ? 'bg-indigo-600 hover:bg-indigo-700' : action.type === 'check' ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-700 hover:bg-gray-800';
-                            const btnIcon = action.type === 'call' ? '📞' : action.type === 'map' ? '🗺️' : action.type === 'payment' ? '💵' : action.type === 'timer' ? '⏱️' : action.type === 'check' ? '✅' : 'ℹ️';
-                            
-                            return `
-                                <button data-action-type="${action.type}" data-action-value="${action.value}" class="action-btn w-full flex items-center justify-center text-xs font-semibold py-2 px-3 rounded-lg text-white ${btnColor} transition duration-150 shadow-md">
-                                    ${btnIcon} <span class="ml-1">${action.label}</span>
-                                </button>
-                            `;
-                        }).join('')}
-                        <button data-task-toggle="${day}-${index}" class="toggle-complete-btn w-full text-xs font-semibold py-2 px-3 rounded-lg ${isCompleted ? 'bg-gray-500 hover:bg-gray-600' : 'bg-gray-300 hover:bg-gray-400'} text-white transition duration-150 shadow-md">
-                            ${isCompleted ? 'UNDO COMPLETE' : 'MARK COMPLETE'}
-                        </button>
-                    </div>
-                </div>
-            `;
-            return itemDiv;
-        }
+    // --- Global Variables (Provided by Canvas) ---
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+    const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+    const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+    const apiKey = ""; // Canvas provides the actual key at runtime
 
-        function renderSchedule(day) {
-            const container = document.getElementById(`${day}-timeline`);
-            if (!container) return;
+    // --- Firebase Initialization (Required for Env.) ---
+    let app, db, auth;
+    if (Object.keys(firebaseConfig).length > 0) {
+        try {
+            app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
 
-            container.innerHTML = '';
-            const data = ITINERARY_DATA[day];
-
-            if (!data) {
-                container.innerHTML = `<div class="p-10 text-center"><p class="text-xl text-gray-500">Schedule details for ${day.charAt(0).toUpperCase() + day.slice(1)} are currently being finalized.</p></div>`;
-                return;
-            }
-
-            data.tasks.forEach((task, index) => {
-                const item = createTimelineItem(day, task, index);
-                container.appendChild(item);
-            });
-            
-            attachEventListeners();
-        }
-
-        function switchDay(day) {
-            STATE.activeDay = day;
-            saveState();
-
-            document.querySelectorAll('.day-btn').forEach(btn => {
-                const isSelected = btn.dataset.day === day;
-                btn.classList.toggle('active', isSelected);
-                btn.classList.toggle('bg-orange-600', isSelected);
-                btn.classList.toggle('text-white', isSelected);
-                btn.classList.toggle('bg-gray-200', !isSelected);
-                btn.classList.toggle('text-gray-700', !isSelected);
-            });
-
-            document.querySelectorAll('.day-content').forEach(content => {
-                const isActive = content.id === `${day}-content`;
-                content.classList.toggle('hidden', !isActive);
-                if (isActive) {
-                    renderSchedule(day);
-                }
-            });
-        }
-
-        function toggleTaskCompletion(taskId) {
-            const isCompleted = STATE.completionStatus[taskId];
-            STATE.completionStatus[taskId] = !isCompleted;
-            saveState();
-            
-            const [day] = taskId.split('-');
-            if (day === STATE.activeDay) {
-                 renderSchedule(day); 
-            }
-        }
-
-        function handleAction(type, value, taskTitle) {
-            let message = '';
-            if (type === 'call' && value.startsWith('tel:')) {
-                message = `Action: Initiating Call/App Request for "${taskTitle}". Value: ${value}`;
-                // In a real app, this would execute the tel: link
-            } else if (type === 'payment') {
-                message = `CRITICAL PAYMENT ALERT: Confirm ${value} was paid to the vendor for the "${taskTitle}".`;
-            } else if (type === 'map' && value.startsWith('http')) {
-                 window.open(value, '_blank');
-                 message = `Opening map link for "${taskTitle}" in a new window.`;
-            } else if (type === 'timer') {
-                message = `TIMER STARTED: 60 minutes for "${taskTitle}". Ensure group is back by deadline.`;
-            } else if (type === 'check' || type === 'info') {
-                message = `INFO: Logistical Checkpoint for "${taskTitle}". Value: ${value}`;
-            }
-            // Use a simple alert since the environment doesn't support custom modals easily
-            alert(message);
-        }
-
-        function attachEventListeners() {
-            document.querySelectorAll('.toggle-complete-btn').forEach(btn => {
-                btn.onclick = () => {
-                    const taskId = btn.dataset.taskToggle;
-                    toggleTaskCompletion(taskId);
-                };
-            });
-
-            document.querySelectorAll('.action-btn').forEach(btn => {
-                btn.onclick = (e) => {
-                    const type = btn.dataset.actionType;
-                    const value = btn.dataset.actionValue;
-                    const item = e.target.closest('.timeline-item');
-                    if (item) {
-                       const taskTitle = item.querySelector('.task-title').textContent;
-                       handleAction(type, value, taskTitle);
+            // Authentication logic
+            onAuthStateChanged(auth, (user) => {
+                if (!user) {
+                    if (initialAuthToken) {
+                        signInWithCustomToken(auth, initialAuthToken).catch(error => {
+                            console.error("Firebase Custom Token sign-in failed:", error);
+                            signInAnonymously(auth);
+                        });
+                    } else {
+                        signInAnonymously(auth).catch(error => {
+                            console.error("Firebase Anonymous sign-in failed:", error);
+                        });
                     }
-                };
-            });
-        }
-
-
-        // Initialization
-        document.addEventListener('DOMContentLoaded', () => {
-            // Set the correct button and content to active initially
-            switchDay(STATE.activeDay);
-
-            // Add day switching functionality
-            document.getElementById('day-selector').addEventListener('click', (e) => {
-                const btn = e.target.closest('.day-btn');
-                if (btn && btn.dataset.day) {
-                    switchDay(btn.dataset.day);
                 }
             });
+        } catch (error) {
+            console.error("Firebase initialization failed:", error);
+        }
+    }
+
+    // --- Core Itinerary Logic ---
+    let itineraryData = [];
+    let currentDay = '';
+
+    const loadingIndicator = document.getElementById('loadingIndicator');
+    const tabsContainer = document.getElementById('tabs-container');
+    const contentContainer = document.getElementById('content-container');
+
+    const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQWJ5w6j6-U73D_8q_sL0z8tM-oQkK4o9-g0c0-6O9I8/pub?gid=0&single=true&output=csv'; // Mock URL provided earlier
+
+    function showLoading(show) {
+        loadingIndicator.style.display = show ? 'flex' : 'none';
+    }
+
+    function parseCSV(text) {
+        const lines = text.trim().split('\n');
+        const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+        const data = [];
+
+        for (let i = 1; i < lines.length; i++) {
+            const row = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(c => c.trim().replace(/"/g, ''));
+            if (row.length === headers.length) {
+                const item = {};
+                headers.forEach((header, index) => {
+                    item[header] = row[index] || '';
+                });
+                data.push(item);
+            } else if (row.some(c => c.length > 0)) {
+                console.warn(`Skipping malformed row ${i + 1}: ${lines[i]}`);
+            }
+        }
+        return data;
+    }
+
+    function renderTabs(data) {
+        const uniqueDays = [...new Set(data.map(item => item['Day/Date']).filter(d => d))];
+        tabsContainer.innerHTML = '';
+
+        uniqueDays.forEach((day, index) => {
+            const button = document.createElement('button');
+            button.className = 'tab-button px-4 py-2 text-sm font-medium rounded-full transition duration-150 hover:bg-emerald-100 hover:text-emerald-700 text-gray-700 bg-white shadow-sm';
+            button.textContent = day;
+            button.onclick = () => switchDay(day);
+            tabsContainer.appendChild(button);
+
+            if (index === 0) {
+                currentDay = day;
+                button.classList.add('active');
+            }
         });
-    </script>
+        if (uniqueDays.length > 0) {
+            renderContent(currentDay);
+        } else {
+            contentContainer.innerHTML = '<p class="text-center text-gray-500 p-8">No itinerary data found or CSV is empty.</p>';
+        }
+    }
+
+    function switchDay(day) {
+        currentDay = day;
+        document.querySelectorAll('.tab-button').forEach(btn => {
+            btn.classList.remove('active');
+            if (btn.textContent === day) {
+                btn.classList.add('active');
+            }
+        });
+        renderContent(day);
+    }
+
+    function renderContent(day) {
+        const dayData = itineraryData.filter(item => item['Day/Date'] === day);
+        if (dayData.length === 0) {
+            contentContainer.innerHTML = `<p class="text-center text-gray-500 p-8">No activities scheduled for ${day}.</p>`;
+            return;
+        }
+
+        let tableHtml = `
+            <h2 class="text-2xl font-semibold text-gray-800 mb-6">${day} Activities</h2>
+            <div class="overflow-x-auto rounded-lg border border-gray-200">
+            <table class="min-w-full divide-y divide-gray-200 activity-table">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Activity</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Logistics</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+        `;
+
+        dayData.forEach(item => {
+            tableHtml += `
+                <tr>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${item['Time'] || '-'}</td>
+                    <td class="px-6 py-4 text-sm text-gray-700">${item['Activity Description'] || '-'}</td>
+                    <td class="px-6 py-4 text-sm text-gray-700">${item['Location'] || '-'}</td>
+                    <td class="px-6 py-4 text-sm text-gray-700">${item['Logistics / Notes'] || '-'}</td>
+                </tr>
+            `;
+        });
+
+        tableHtml += `
+                </tbody>
+            </table>
+            </div>
+        `;
+        contentContainer.innerHTML = tableHtml;
+    }
+
+    async function loadItinerary() {
+        showLoading(true);
+        try {
+            const response = await fetch(csvUrl);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            const csvText = await response.text();
+            itineraryData = parseCSV(csvText);
+            renderTabs(itineraryData);
+        } catch (error) {
+            console.error('Failed to load CSV:', error);
+            contentContainer.innerHTML = `<p class="text-center text-red-500 p-8">Error loading itinerary data: ${error.message}. Please check the CSV link.</p>`;
+        } finally {
+            showLoading(false);
+        }
+    }
+
+    // --- Gemini Chat Logic ---
+
+    const chatMessages = document.getElementById('chat-messages');
+    const chatInput = document.getElementById('chat-input');
+    const sendBtn = document.getElementById('send-btn');
+    const chatHeader = document.getElementById('chat-header');
+    const chatInputArea = document.getElementById('chat-input-area');
+    const toggleChatBtn = document.getElementById('toggle-chat-btn');
+
+    let isChatOpen = false;
+
+    // Initially hide chat content
+    chatMessages.style.display = 'none';
+    chatInputArea.style.display = 'none';
+
+    // Toggle chat box visibility
+    function toggleChat() {
+        isChatOpen = !isChatOpen;
+        chatMessages.style.display = isChatOpen ? 'flex' : 'none';
+        chatInputArea.style.display = isChatOpen ? 'flex' : 'none';
+        toggleChatBtn.textContent = isChatOpen ? '−' : '+';
+        document.getElementById('chat-box').classList.toggle('max-h-80', isChatOpen);
+        document.getElementById('chat-box').classList.toggle('max-h-16', !isChatOpen);
+        if (isChatOpen) {
+            scrollToBottom();
+        }
+    }
+    toggleChatBtn.addEventListener('click', toggleChat);
+    chatHeader.addEventListener('click', toggleChat); // Click anywhere on header to toggle
+
+    function appendMessage(text, sender, sources = []) {
+        const bubble = document.createElement('div');
+        bubble.className = `message-bubble ${sender === 'user' ? 'user-message' : 'gemini-message'}`;
+        
+        let contentHtml = `<p>${text}</p>`;
+
+        if (sender === 'gemini' && sources.length > 0) {
+            contentHtml += `<div class="gemini-source mt-2 text-xs">
+                <p class="font-bold mb-1">Sources:</p>
+                <ul>
+                    ${sources.map(s => `<li><a href="${s.uri}" target="_blank" class="hover:underline">${s.title || s.uri}</a></li>`).join('')}
+                </ul>
+            </div>`;
+        }
+
+        bubble.innerHTML = contentHtml;
+        chatMessages.appendChild(bubble);
+        scrollToBottom();
+    }
+
+    function scrollToBottom() {
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    function createLoader() {
+        const loader = document.createElement('div');
+        loader.id = 'gemini-loader';
+        loader.className = 'message-bubble gemini-message flex items-center';
+        loader.innerHTML = `
+            <div class="animate-pulse flex space-x-2">
+                <div class="w-2 h-2 bg-emerald-600 rounded-full"></div>
+                <div class="w-2 h-2 bg-emerald-600 rounded-full"></div>
+                <div class="w-2 h-2 bg-emerald-600 rounded-full"></div>
+            </div>
+        `;
+        chatMessages.appendChild(loader);
+        scrollToBottom();
+        return loader;
+    }
+
+    async function fetchWithExponentialBackoff(apiUrl, payload, maxRetries = 5) {
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (response.status === 429 || response.status >= 500) {
+                    if (attempt === maxRetries - 1) throw new Error("API request failed after all retries.");
+                    const delay = Math.pow(2, attempt) * 1000 + Math.random() * 1000;
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    continue; // Retry
+                }
+
+                if (!response.ok) {
+                    throw new Error(`API returned status ${response.status}`);
+                }
+
+                return response.json();
+
+            } catch (error) {
+                if (attempt === maxRetries - 1) throw error;
+                const delay = Math.pow(2, attempt) * 1000 + Math.random() * 1000;
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
+        }
+    }
+
+    async function sendMessage() {
+        const userQuery = chatInput.value.trim();
+        if (!userQuery) return;
+
+        appendMessage(userQuery, 'user');
+        chatInput.value = '';
+        sendBtn.disabled = true;
+
+        const loader = createLoader();
+        
+        // 1. Prepare Context and Payload
+        const itineraryContext = JSON.stringify(itineraryData, null, 2);
+        const systemPrompt = `You are a helpful and detailed itinerary assistant named 'Gemini'. The user is asking questions about the following travel plan. Base your primary answers on this data first. If the user asks a general question (like about weather, transportation, or local attractions not in the itinerary), use Google Search to provide an answer.
+
+ITINERARY DATA:
+---
+${itineraryContext}
+---
+
+Answer all questions concisely and clearly. If you cannot find the answer in the itinerary, state that and then use Google Search for general information if applicable.`;
+        
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+
+        const payload = {
+            contents: [{ parts: [{ text: userQuery }] }],
+            // Enable Google Search for grounding general knowledge questions
+            tools: [{ "google_search": {} }],
+            systemInstruction: {
+                parts: [{ text: systemPrompt }]
+            },
+        };
+
+        try {
+            const result = await fetchWithExponentialBackoff(apiUrl, payload);
+            
+            // 2. Process Response
+            const candidate = result.candidates?.[0];
+            let responseText = "I apologize, but I couldn't generate a response for that query.";
+            let sources = [];
+
+            if (candidate && candidate.content?.parts?.[0]?.text) {
+                responseText = candidate.content.parts[0].text;
+                
+                const groundingMetadata = candidate.groundingMetadata;
+                if (groundingMetadata && groundingMetadata.groundingAttributions) {
+                    sources = groundingMetadata.groundingAttributions
+                        .map(attribution => ({
+                            uri: attribution.web?.uri,
+                            title: attribution.web?.title,
+                        }))
+                        .filter(source => source.uri && source.title); // Ensure sources are valid
+                }
+            }
+
+            // 3. Display Response
+            chatMessages.removeChild(loader);
+            appendMessage(responseText, 'gemini', sources);
+
+        } catch (error) {
+            console.error("Gemini API Error:", error);
+            if (chatMessages.contains(loader)) {
+                chatMessages.removeChild(loader);
+            }
+            appendMessage("Error: Could not connect to the assistant. Please try again.", 'gemini');
+        } finally {
+            sendBtn.disabled = false;
+        }
+    }
+
+    sendBtn.addEventListener('click', sendMessage);
+    chatInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            sendMessage();
+        }
+    });
+
+    // Initial load of the itinerary when the script executes
+    loadItinerary();
+</script>
+
 </body>
 </html>
