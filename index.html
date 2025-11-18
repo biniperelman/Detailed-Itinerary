@@ -43,6 +43,11 @@
             overflow: hidden;
             display: flex;
             flex-direction: column;
+            /* Start collapsed */
+            max-height: 4rem; 
+            transition: max-height 0.3s ease-out;
+        }
+        .chat-container.open {
             max-height: 80vh;
         }
         .chat-messages {
@@ -115,11 +120,11 @@
     <!-- Chat Header -->
     <div id="chat-header" class="p-4 bg-emerald-500 text-white flex justify-between items-center rounded-t-xl cursor-pointer">
         <h3 class="text-xl font-bold">Itinerary Assistant (Gemini)</h3>
-        <button id="toggle-chat-btn" class="text-2xl font-bold p-1 leading-none rounded-full hover:bg-emerald-400">&times;</button>
+        <button id="toggle-chat-btn" class="text-2xl font-bold p-1 leading-none rounded-full hover:bg-emerald-400">+</button>
     </div>
 
     <!-- Chat Messages -->
-    <div id="chat-messages" class="chat-messages h-64" style="display: none;">
+    <div id="chat-messages" class="chat-messages" style="display: none;">
         <!-- Initial Welcome Message -->
         <div class="message-bubble gemini-message">
             Hello! I'm your Itinerary Assistant. Ask me anything about your schedule, logistics, or general travel questions.
@@ -139,8 +144,7 @@
 </div>
 
 <script type="module">
-    // Firebase imports are included even if not strictly used for this feature, 
-    // to maintain the standard environment structure for authentication.
+    // --- Firebase imports (Required for Env.) ---
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
     import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
     import { getFirestore } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
@@ -151,7 +155,7 @@
     const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
     const apiKey = ""; // Canvas provides the actual key at runtime
 
-    // --- Firebase Initialization (Required for Env.) ---
+    // --- Firebase Initialization ---
     let app, db, auth;
     if (Object.keys(firebaseConfig).length > 0) {
         try {
@@ -162,16 +166,22 @@
             // Authentication logic
             onAuthStateChanged(auth, (user) => {
                 if (!user) {
-                    if (initialAuthToken) {
-                        signInWithCustomToken(auth, initialAuthToken).catch(error => {
-                            console.error("Firebase Custom Token sign-in failed:", error);
-                            signInAnonymously(auth);
-                        });
-                    } else {
-                        signInAnonymously(auth).catch(error => {
-                            console.error("Firebase Anonymous sign-in failed:", error);
-                        });
-                    }
+                    // Sign in with custom token if available, otherwise anonymously
+                    (async () => {
+                        try {
+                            if (initialAuthToken) {
+                                await signInWithCustomToken(auth, initialAuthToken);
+                            } else {
+                                await signInAnonymously(auth);
+                            }
+                        } catch (error) {
+                            console.error("Firebase sign-in failed:", error);
+                            // Fallback to anonymous sign-in if custom token fails
+                            if (!auth.currentUser) {
+                                await signInAnonymously(auth).catch(err => console.error("Anonymous sign-in failed:", err));
+                            }
+                        }
+                    })();
                 }
             });
         } catch (error) {
@@ -187,7 +197,8 @@
     const tabsContainer = document.getElementById('tabs-container');
     const contentContainer = document.getElementById('content-container');
 
-    const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQWJ5w6j6-U73D_8q_sL0z8tM-oQkK4o9-g0c0-6O9I8/pub?gid=0&single=true&output=csv'; // Mock URL provided earlier
+    // !!! UPDATED with the new public CSV URL !!!
+    const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRip3XVrk7VVTw8BTxJIFiEfr26jDhhuyMnGBDrB191c3wjVaz3DJ4ra4ZMrvXW0HbNAMl28rxMrqcB/pub?output=csv'; 
 
     function showLoading(show) {
         loadingIndicator.style.display = show ? 'flex' : 'none';
@@ -195,33 +206,57 @@
 
     function parseCSV(text) {
         const lines = text.trim().split('\n');
+        // Handle potential empty or short CSV
+        if (lines.length <= 1) return [];
+
+        // Simple split for headers, removing quotes
         const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
         const data = [];
 
         for (let i = 1; i < lines.length; i++) {
-            const row = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(c => c.trim().replace(/"/g, ''));
-            if (row.length === headers.length) {
+            const line = lines[i].trim();
+            if (!line) continue;
+
+            // Regex to split by comma, but ignore commas inside double quotes
+            // This is a robust way to handle cells with commas inside them (which are usually quoted)
+            const row = line.match(/(".*?"|[^",\r\n]+)(?=\s*,|\s*$)/g) || [];
+            
+            // Clean up row content and match lengths
+            const cleanedRow = row.map(c => c.trim().replace(/^"|"$/g, ''));
+            
+            if (cleanedRow.length > 0 && cleanedRow.length >= headers.length) {
                 const item = {};
                 headers.forEach((header, index) => {
-                    item[header] = row[index] || '';
+                    // Use index to match data to headers, even if the data row is longer
+                    if (cleanedRow[index] !== undefined) {
+                        item[header] = cleanedRow[index];
+                    } else {
+                        item[header] = '';
+                    }
                 });
                 data.push(item);
-            } else if (row.some(c => c.length > 0)) {
-                console.warn(`Skipping malformed row ${i + 1}: ${lines[i]}`);
+            } else if (cleanedRow.some(c => c.length > 0)) {
+                console.warn(`Skipping malformed row ${i + 1}: ${line}`);
             }
         }
-        return data;
+        return data.filter(item => Object.values(item).some(v => v)); // Filter out completely empty rows
     }
 
+
     function renderTabs(data) {
-        const uniqueDays = [...new Set(data.map(item => item['Day/Date']).filter(d => d))];
+        // Find the most appropriate date header
+        const allHeaders = Object.keys(data[0] || {});
+        const dateHeader = allHeaders.find(key => key.toLowerCase().includes('day') && key.toLowerCase().includes('date')) || allHeaders[0];
+
+        // Filter out empty/null values and get unique days
+        const uniqueDays = [...new Set(data.map(item => item[dateHeader]).filter(d => d && d.trim()))];
         tabsContainer.innerHTML = '';
 
         uniqueDays.forEach((day, index) => {
             const button = document.createElement('button');
             button.className = 'tab-button px-4 py-2 text-sm font-medium rounded-full transition duration-150 hover:bg-emerald-100 hover:text-emerald-700 text-gray-700 bg-white shadow-sm';
             button.textContent = day;
-            button.onclick = () => switchDay(day);
+            button.onclick = () => switchDay(day, dateHeader);
             tabsContainer.appendChild(button);
 
             if (index === 0) {
@@ -230,13 +265,13 @@
             }
         });
         if (uniqueDays.length > 0) {
-            renderContent(currentDay);
+            renderContent(currentDay, dateHeader);
         } else {
-            contentContainer.innerHTML = '<p class="text-center text-gray-500 p-8">No itinerary data found or CSV is empty.</p>';
+            contentContainer.innerHTML = '<p class="text-center text-gray-500 p-8">No itinerary data found or CSV is empty. Please check the "Day/Date" column header name.</p>';
         }
     }
 
-    function switchDay(day) {
+    function switchDay(day, dateHeader) {
         currentDay = day;
         document.querySelectorAll('.tab-button').forEach(btn => {
             btn.classList.remove('active');
@@ -244,15 +279,19 @@
                 btn.classList.add('active');
             }
         });
-        renderContent(day);
+        renderContent(day, dateHeader);
     }
 
-    function renderContent(day) {
-        const dayData = itineraryData.filter(item => item['Day/Date'] === day);
+    function renderContent(day, dateHeader) {
+        const dayData = itineraryData.filter(item => item[dateHeader] === day);
         if (dayData.length === 0) {
             contentContainer.innerHTML = `<p class="text-center text-gray-500 p-8">No activities scheduled for ${day}.</p>`;
             return;
         }
+
+        const headers = Object.keys(dayData[0]);
+        // Filter out the date header and only show 4 key columns for a clean view
+        const displayHeaders = headers.filter(h => h !== dateHeader).slice(0, 4); 
 
         let tableHtml = `
             <h2 class="text-2xl font-semibold text-gray-800 mb-6">${day} Activities</h2>
@@ -260,24 +299,18 @@
             <table class="min-w-full divide-y divide-gray-200 activity-table">
                 <thead class="bg-gray-50">
                     <tr>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Activity</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Logistics</th>
+                        ${displayHeaders.map(h => `<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">${h}</th>`).join('')}
                     </tr>
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
         `;
 
         dayData.forEach(item => {
-            tableHtml += `
-                <tr>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${item['Time'] || '-'}</td>
-                    <td class="px-6 py-4 text-sm text-gray-700">${item['Activity Description'] || '-'}</td>
-                    <td class="px-6 py-4 text-sm text-gray-700">${item['Location'] || '-'}</td>
-                    <td class="px-6 py-4 text-sm text-gray-700">${item['Logistics / Notes'] || '-'}</td>
-                </tr>
-            `;
+            tableHtml += '<tr>';
+            displayHeaders.forEach(header => {
+                tableHtml += `<td class="px-6 py-4 text-sm text-gray-700">${item[header] || '-'}</td>`;
+            });
+            tableHtml += '</tr>';
         });
 
         tableHtml += `
@@ -293,14 +326,20 @@
         try {
             const response = await fetch(csvUrl);
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+                const errorMessage = `Error loading itinerary data: HTTP error! status: ${response.status}. Please check the CSV link and ensure it is published correctly.`;
+                throw new Error(errorMessage);
             }
             const csvText = await response.text();
             itineraryData = parseCSV(csvText);
+            
+            if (itineraryData.length === 0) {
+                 throw new Error("The CSV file is empty or contains no detectable data. Please check your spreadsheet content.");
+            }
+
             renderTabs(itineraryData);
         } catch (error) {
             console.error('Failed to load CSV:', error);
-            contentContainer.innerHTML = `<p class="text-center text-red-500 p-8">Error loading itinerary data: ${error.message}. Please check the CSV link.</p>`;
+            contentContainer.innerHTML = `<p class="text-center text-red-500 font-semibold p-8">${error.message}</p>`;
         } finally {
             showLoading(false);
         }
@@ -308,6 +347,7 @@
 
     // --- Gemini Chat Logic ---
 
+    const chatBox = document.getElementById('chat-box');
     const chatMessages = document.getElementById('chat-messages');
     const chatInput = document.getElementById('chat-input');
     const sendBtn = document.getElementById('send-btn');
@@ -317,30 +357,48 @@
 
     let isChatOpen = false;
 
-    // Initially hide chat content
-    chatMessages.style.display = 'none';
-    chatInputArea.style.display = 'none';
-
+    // Set initial state to collapsed (not open) and adjust content/button text
+    function setInitialChatState() {
+        // We set to open=false and run toggleChat to achieve the initial closed state,
+        // which correctly sets the class and visibility.
+        isChatOpen = true; 
+        toggleChat(); 
+    }
+    
     // Toggle chat box visibility
     function toggleChat() {
         isChatOpen = !isChatOpen;
-        chatMessages.style.display = isChatOpen ? 'flex' : 'none';
-        chatInputArea.style.display = isChatOpen ? 'flex' : 'none';
-        toggleChatBtn.textContent = isChatOpen ? '−' : '+';
-        document.getElementById('chat-box').classList.toggle('max-h-80', isChatOpen);
-        document.getElementById('chat-box').classList.toggle('max-h-16', !isChatOpen);
         if (isChatOpen) {
-            scrollToBottom();
+            chatBox.classList.add('open');
+            chatMessages.style.display = 'flex';
+            chatInputArea.style.display = 'flex';
+            toggleChatBtn.textContent = '−';
+            // Wait for the transition before scrolling
+            setTimeout(() => scrollToBottom(), 300); 
+        } else {
+            chatBox.classList.remove('open');
+            // Delay hiding content to allow CSS transition to finish
+            setTimeout(() => {
+                chatMessages.style.display = 'none';
+                chatInputArea.style.display = 'none';
+            }, 300); 
+            toggleChatBtn.textContent = '+';
         }
     }
-    toggleChatBtn.addEventListener('click', toggleChat);
-    chatHeader.addEventListener('click', toggleChat); // Click anywhere on header to toggle
+
+    chatHeader.addEventListener('click', toggleChat); 
+    toggleChatBtn.addEventListener('click', (e) => {
+        e.stopPropagation(); // Prevent the click from bubbling up to the header's click event
+        toggleChat();
+    });
 
     function appendMessage(text, sender, sources = []) {
         const bubble = document.createElement('div');
         bubble.className = `message-bubble ${sender === 'user' ? 'user-message' : 'gemini-message'}`;
         
-        let contentHtml = `<p>${text}</p>`;
+        // Escape special characters in text before setting as HTML
+        const safeText = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        let contentHtml = `<p class="message-text">${safeText}</p>`;
 
         if (sender === 'gemini' && sources.length > 0) {
             contentHtml += `<div class="gemini-source mt-2 text-xs">
@@ -393,7 +451,15 @@
                 }
 
                 if (!response.ok) {
-                    throw new Error(`API returned status ${response.status}`);
+                    // Attempt to parse error message if available
+                    let errorDetails = `API returned status ${response.status}`;
+                    try {
+                        const errorJson = await response.json();
+                        errorDetails += `: ${errorJson.error?.message || JSON.stringify(errorJson)}`;
+                    } catch {
+                        // Ignore if JSON parsing fails
+                    }
+                    throw new Error(errorDetails);
                 }
 
                 return response.json();
@@ -418,14 +484,18 @@
         
         // 1. Prepare Context and Payload
         const itineraryContext = JSON.stringify(itineraryData, null, 2);
+        
+        // Use the first 5000 characters of the context to keep the prompt size reasonable
+        const contextSnippet = itineraryContext.substring(0, 5000) + (itineraryContext.length > 5000 ? "\n[... itinerary data truncated for length ...]" : "");
+
         const systemPrompt = `You are a helpful and detailed itinerary assistant named 'Gemini'. The user is asking questions about the following travel plan. Base your primary answers on this data first. If the user asks a general question (like about weather, transportation, or local attractions not in the itinerary), use Google Search to provide an answer.
 
 ITINERARY DATA:
 ---
-${itineraryContext}
+${contextSnippet}
 ---
 
-Answer all questions concisely and clearly. If you cannot find the answer in the itinerary, state that and then use Google Search for general information if applicable.`;
+Answer all questions concisely and clearly. If the itinerary data is empty, state that and use Google Search for general travel help. If you cannot find the answer in the itinerary, state that and then use Google Search for general information if applicable.`;
         
         const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
 
@@ -469,7 +539,7 @@ Answer all questions concisely and clearly. If you cannot find the answer in the
             if (chatMessages.contains(loader)) {
                 chatMessages.removeChild(loader);
             }
-            appendMessage("Error: Could not connect to the assistant. Please try again.", 'gemini');
+            appendMessage(`Error: Could not connect to the assistant. Details: ${error.message}`, 'gemini');
         } finally {
             sendBtn.disabled = false;
         }
@@ -482,8 +552,11 @@ Answer all questions concisely and clearly. If you cannot find the answer in the
         }
     });
 
-    // Initial load of the itinerary when the script executes
-    loadItinerary();
+    // Initial setup and load
+    document.addEventListener('DOMContentLoaded', () => {
+        setInitialChatState();
+        loadItinerary();
+    });
 </script>
 
 </body>
