@@ -172,7 +172,13 @@
     const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
     // Initial Auth Token is a string (JWT), no JSON.parse() needed.
     const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-    const apiKey = ""; // Canvas provides the actual key at runtime
+    
+    // ====================================================================
+    // 🛑 IMPORTANT: EDIT THE LINE BELOW (Line 144)
+    // 🔑 If running on GitHub, you MUST replace "YOUR_API_KEY_HERE" with your actual Gemini API key.
+    // ⚠️ WARNING: Posting your key to a public repository is a security risk.
+    const apiKey = "AIzaSyBFBRy21wYV4B3xEjPVxDFjIZOXXBBN_io"; 
+    // ====================================================================
 
     // --- Firebase Initialization ---
     let app, db, auth;
@@ -561,11 +567,9 @@ ${contextSnippet}
 
 Answer all questions concisely and clearly. If the itinerary data is empty, state that and use Google Search for general travel help. If you cannot find the answer in the itinerary, state that and then use Google Search for general information if applicable.`;
         
-        // FIX: Conditionally construct the API URL. If apiKey is "", omit the "?key=" parameter 
-        // entirely to avoid triggering the 403 error due to an empty value, relying on the 
-        // environment to provide authentication via other means.
+        // IMPORTANT: The apiKey is defined at the top of the script. 
         const baseUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent`;
-        const apiUrl = apiKey ? `${baseUrl}?key=${apiKey}` : baseUrl;
+        const apiUrl = `${baseUrl}?key=${apiKey}`;
 
         const payload = {
             contents: [{ parts: [{ text: userQuery }] }],
