@@ -561,7 +561,11 @@ ${contextSnippet}
 
 Answer all questions concisely and clearly. If the itinerary data is empty, state that and use Google Search for general travel help. If you cannot find the answer in the itinerary, state that and then use Google Search for general information if applicable.`;
         
-        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+        // FIX: Conditionally construct the API URL. If apiKey is "", omit the "?key=" parameter 
+        // entirely to avoid triggering the 403 error due to an empty value, relying on the 
+        // environment to provide authentication via other means.
+        const baseUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent`;
+        const apiUrl = apiKey ? `${baseUrl}?key=${apiKey}` : baseUrl;
 
         const payload = {
             contents: [{ parts: [{ text: userQuery }] }],
