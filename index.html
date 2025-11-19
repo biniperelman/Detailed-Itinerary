@@ -7,11 +7,11 @@
     <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* Custom styles for better aesthetics and fixed chat box */
+        /* Custom styles for better aesthetics */
         body {
             font-family: 'Inter', sans-serif;
             background-color: #f7f7f7;
-            padding-bottom: 200px; /* Space for the fixed chat box */
+            /* No padding-bottom needed as the chat box is gone */
         }
         .container {
             max-width: 1200px;
@@ -30,7 +30,7 @@
         .activity-table tr:nth-child(even) {
             background-color: #f9fafb;
         }
-        /* New timeline styling */
+        /* Timeline styling */
         .timeline-item {
             border-left: 2px solid #d1d5db; /* gray-300 */
             padding-left: 1.5rem;
@@ -46,66 +46,6 @@
             border: 3px solid white;
             border-radius: 50%;
             box-shadow: 0 0 0 2px #10b981;
-        }
-
-        .chat-container {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            width: 90%;
-            max-width: 400px;
-            background: white;
-            border-radius: 1.5rem;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-            z-index: 1000;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-            /* Start collapsed */
-            max-height: 4rem; 
-            transition: max-height 0.3s ease-out;
-        }
-        .chat-container.open {
-            max-height: 80vh;
-        }
-        .chat-messages {
-            flex-grow: 1;
-            padding: 1rem;
-            overflow-y: auto;
-            display: flex;
-            flex-direction: column;
-            gap: 0.75rem;
-        }
-        .chat-input-area {
-            padding: 1rem;
-            border-top: 1px solid #e5e7eb;
-            display: flex;
-            align-items: center;
-        }
-        .message-bubble {
-            max-width: 85%;
-            padding: 0.5rem 1rem;
-            border-radius: 1rem;
-            word-wrap: break-word;
-        }
-        .user-message {
-            align-self: flex-end;
-            background-color: #3b82f6; /* Blue 500 */
-            color: white;
-            border-bottom-right-radius: 0.25rem;
-        }
-        .gemini-message {
-            align-self: flex-start;
-            background-color: #d1fae5; /* Green 100 */
-            color: #065f46; /* Green 800 */
-            border-bottom-left-radius: 0.25rem;
-        }
-        .gemini-source {
-            font-size: 0.75rem;
-            color: #6b7280;
-            margin-top: 0.5rem;
-            padding-left: 0.5rem;
-            border-left: 2px solid #a7f3d0;
         }
     </style>
 </head>
@@ -133,36 +73,8 @@
     </div>
 </div>
 
-<!-- Gemini Chat Box -->
-<div id="chat-box" class="chat-container">
-    <!-- Chat Header -->
-    <div id="chat-header" class="p-4 bg-emerald-500 text-white flex justify-between items-center rounded-t-xl cursor-pointer">
-        <h3 class="text-xl font-bold">Itinerary Assistant (Gemini)</h3>
-        <button id="toggle-chat-btn" class="text-2xl font-bold p-1 leading-none rounded-full hover:bg-emerald-400">−</button>
-    </div>
-
-    <!-- Chat Messages -->
-    <div id="chat-messages" class="chat-messages">
-        <!-- Initial Welcome Message -->
-        <div class="message-bubble gemini-message">
-            Hello! I'm your Itinerary Assistant. Ask me anything about your schedule, logistics, or general travel questions.
-        </div>
-        <!-- Messages will be appended here -->
-    </div>
-
-    <!-- Chat Input -->
-    <div id="chat-input-area" class="chat-input-area">
-        <input type="text" id="chat-input" placeholder="Ask about the itinerary or UK travel..."
-               class="flex-grow p-3 border border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 mr-2 shadow-inner">
-        <button id="send-btn"
-                class="bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-3 px-4 rounded-lg transition duration-200 shadow-md flex items-center disabled:opacity-50">
-            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 00.183.69l.006.006A1 1 0 003 18h14a1 1 0 00.894-1.447l-7-14z"></path></svg>
-        </button>
-    </div>
-</div>
-
 <script type="module">
-    // --- Firebase imports (Required for Env.) ---
+    // --- Firebase imports (Kept for environment compatibility) ---
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
     import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
     import { getFirestore } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
@@ -170,15 +82,9 @@
     // --- Global Variables (Provided by Canvas) ---
     const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
     const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-    // Initial Auth Token is a string (JWT), no JSON.parse() needed.
     const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
     
-    // ====================================================================
-    // 🛑 IMPORTANT: EDIT THE LINE BELOW (Line 144)
-    // 🔑 If running on GitHub, you MUST replace "YOUR_API_KEY_HERE" with your actual Gemini API key.
-    // ⚠️ WARNING: Posting your key to a public repository is a security risk.
-    const apiKey = "AIzaSyBFBRy21wYV4B3xEjPVxDFjIZOXXBBN_io"; 
-    // ====================================================================
+    // NOTE: The GEMINI_PROXY_URL and all chat logic have been removed.
 
     // --- Firebase Initialization ---
     let app, db, auth;
@@ -407,226 +313,8 @@
         }
     }
 
-    // --- Gemini Chat Logic ---
-
-    const chatBox = document.getElementById('chat-box');
-    const chatMessages = document.getElementById('chat-messages');
-    const chatInput = document.getElementById('chat-input');
-    const sendBtn = document.getElementById('send-btn');
-    const chatHeader = document.getElementById('chat-header');
-    const chatInputArea = document.getElementById('chat-input-area');
-    const toggleChatBtn = document.getElementById('toggle-chat-btn');
-
-    let isChatOpen = true; // Initial state is open by default
-    
-    // Set initial state of chat box
-    function setInitialChatState() {
-        if (isChatOpen) {
-            chatBox.classList.add('open');
-            chatMessages.style.display = 'flex';
-            chatInputArea.style.display = 'flex';
-            toggleChatBtn.textContent = '−';
-            setTimeout(() => scrollToBottom(), 10); 
-        } else {
-            chatBox.classList.remove('open');
-            chatMessages.style.display = 'none';
-            chatInputArea.style.display = 'none';
-            toggleChatBtn.textContent = '+';
-        }
-    }
-    
-    // Toggle chat box visibility
-    function toggleChat() {
-        isChatOpen = !isChatOpen;
-        if (isChatOpen) {
-            chatBox.classList.add('open');
-            chatMessages.style.display = 'flex';
-            chatInputArea.style.display = 'flex';
-            toggleChatBtn.textContent = '−';
-            // Wait for the transition before scrolling
-            setTimeout(() => scrollToBottom(), 300); 
-        } else {
-            chatBox.classList.remove('open');
-            // Delay hiding content to allow CSS transition to finish
-            setTimeout(() => {
-                chatMessages.style.display = 'none';
-                chatInputArea.style.display = 'none';
-            }, 300); 
-            toggleChatBtn.textContent = '+';
-        }
-    }
-
-    chatHeader.addEventListener('click', toggleChat); 
-    toggleChatBtn.addEventListener('click', (e) => {
-        e.stopPropagation(); // Prevent the click from bubbling up to the header's click event
-        toggleChat();
-    });
-
-    function appendMessage(text, sender, sources = []) {
-        const bubble = document.createElement('div');
-        bubble.className = `message-bubble ${sender === 'user' ? 'user-message' : 'gemini-message'}`;
-        
-        // Escape special characters in text before setting as HTML
-        const safeText = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-        let contentHtml = `<p class="message-text">${safeText}</p>`;
-
-        if (sender === 'gemini' && sources.length > 0) {
-            contentHtml += `<div class="gemini-source mt-2 text-xs">
-                <p class="font-bold mb-1">Sources:</p>
-                <ul>
-                    ${sources.map(s => `<li><a href="${s.uri}" target="_blank" class="hover:underline">${s.title || s.uri}</a></li>`).join('')}
-                </ul>
-            </div>`;
-        }
-
-        bubble.innerHTML = contentHtml;
-        chatMessages.appendChild(bubble);
-        scrollToBottom();
-    }
-
-    function scrollToBottom() {
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-    }
-
-    function createLoader() {
-        const loader = document.createElement('div');
-        loader.id = 'gemini-loader';
-        loader.className = 'message-bubble gemini-message flex items-center';
-        loader.innerHTML = `
-            <div class="animate-pulse flex space-x-2">
-                <div class="w-2 h-2 bg-emerald-600 rounded-full"></div>
-                <div class="w-2 h-2 bg-emerald-600 rounded-full"></div>
-                <div class="w-2 h-2 bg-emerald-600 rounded-full"></div>
-            </div>
-        `;
-        chatMessages.appendChild(loader);
-        scrollToBottom();
-        return loader;
-    }
-
-    async function fetchWithExponentialBackoff(apiUrl, payload, maxRetries = 5) {
-        for (let attempt = 0; attempt < maxRetries; attempt++) {
-            try {
-                const response = await fetch(apiUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-
-                if (response.status === 429 || response.status >= 500) {
-                    if (attempt === maxRetries - 1) throw new Error("API request failed after all retries.");
-                    const delay = Math.pow(2, attempt) * 1000 + Math.random() * 1000;
-                    await new Promise(resolve => setTimeout(resolve, delay));
-                    continue; // Retry
-                }
-
-                if (!response.ok) {
-                    // Attempt to parse error message if available
-                    let errorDetails = `API returned status ${response.status}`;
-                    try {
-                        const errorJson = await response.json();
-                        errorDetails += `: ${errorJson.error?.message || JSON.stringify(errorJson)}`;
-                    } catch {
-                        // Ignore if JSON parsing fails
-                    }
-                    throw new Error(errorDetails);
-                }
-
-                return response.json();
-
-            } catch (error) {
-                if (attempt === maxRetries - 1) throw error;
-                const delay = Math.pow(2, attempt) * 1000 + Math.random() * 1000;
-                await new Promise(resolve => setTimeout(resolve, delay));
-            }
-        }
-    }
-
-    async function sendMessage() {
-        const userQuery = chatInput.value.trim();
-        if (!userQuery) return;
-
-        appendMessage(userQuery, 'user');
-        chatInput.value = '';
-        sendBtn.disabled = true;
-
-        const loader = createLoader();
-        
-        // 1. Prepare Context and Payload
-        const itineraryContext = JSON.stringify(itineraryData, null, 2);
-        
-        // Use the first 5000 characters of the context to keep the prompt size reasonable
-        const contextSnippet = itineraryContext.substring(0, 5000) + (itineraryContext.length > 5000 ? "\n[... itinerary data truncated for length ...]" : "");
-
-        const systemPrompt = `You are a helpful and detailed itinerary assistant named 'Gemini'. The user is asking questions about the following travel plan. Base your primary answers on this data first. If the user asks a general question (like about weather, transportation, or local attractions not in the itinerary), use Google Search to provide an answer.
-
-ITINERARY DATA:
----
-${contextSnippet}
----
-
-Answer all questions concisely and clearly. If the itinerary data is empty, state that and use Google Search for general travel help. If you cannot find the answer in the itinerary, state that and then use Google Search for general information if applicable.`;
-        
-        // IMPORTANT: The apiKey is defined at the top of the script. 
-        const baseUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent`;
-        const apiUrl = `${baseUrl}?key=${apiKey}`;
-
-        const payload = {
-            contents: [{ parts: [{ text: userQuery }] }],
-            // Enable Google Search for grounding general knowledge questions
-            tools: [{ "google_search": {} }],
-            systemInstruction: {
-                parts: [{ text: systemPrompt }]
-            },
-        };
-
-        try {
-            const result = await fetchWithExponentialBackoff(apiUrl, payload);
-            
-            // 2. Process Response
-            const candidate = result.candidates?.[0];
-            let responseText = "I apologize, but I couldn't generate a response for that query.";
-            let sources = [];
-
-            if (candidate && candidate.content?.parts?.[0]?.text) {
-                responseText = candidate.content.parts[0].text;
-                
-                const groundingMetadata = candidate.groundingMetadata;
-                if (groundingMetadata && groundingMetadata.groundingAttributions) {
-                    sources = groundingMetadata.groundingAttributions
-                        .map(attribution => ({
-                            uri: attribution.web?.uri,
-                            title: attribution.web?.title,
-                        }))
-                        .filter(source => source.uri && source.title); // Ensure sources are valid
-                }
-            }
-
-            // 3. Display Response
-            chatMessages.removeChild(loader);
-            appendMessage(responseText, 'gemini', sources);
-
-        } catch (error) {
-            console.error("Gemini API Error:", error);
-            if (chatMessages.contains(loader)) {
-                chatMessages.removeChild(loader);
-            }
-            appendMessage(`Error: Could not connect to the assistant. Details: ${error.message}`, 'gemini');
-        } finally {
-            sendBtn.disabled = false;
-        }
-    }
-
-    sendBtn.addEventListener('click', sendMessage);
-    chatInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-            sendMessage();
-        }
-    });
-
     // Initial setup and load
     document.addEventListener('DOMContentLoaded', () => {
-        setInitialChatState();
         loadItinerary();
     });
 </script>
