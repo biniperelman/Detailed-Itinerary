@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gap Year Itinerary Dashboard</title>
-    <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         /* Custom styles for better aesthetics and fixed chat box */
@@ -107,32 +106,24 @@
     </header>
 
     <div id="tabs-container" class="flex flex-wrap justify-center gap-2 mb-8 p-4 bg-white rounded-xl shadow-md">
-        <!-- Tabs will be rendered here -->
-    </div>
+        </div>
 
     <div id="content-container" class="bg-white p-6 rounded-xl shadow-lg">
-        <!-- Table content will be rendered here -->
-    </div>
+        </div>
 </div>
 
-<!-- Gemini Chat Box -->
 <div id="chat-box" class="chat-container">
-    <!-- Chat Header -->
     <div id="chat-header" class="p-4 bg-emerald-500 text-white flex justify-between items-center rounded-t-xl cursor-pointer">
         <h3 class="text-xl font-bold">Itinerary Assistant (Gemini)</h3>
         <button id="toggle-chat-btn" class="text-2xl font-bold p-1 leading-none rounded-full hover:bg-emerald-400">+</button>
     </div>
 
-    <!-- Chat Messages -->
     <div id="chat-messages" class="chat-messages" style="display: none;">
-        <!-- Initial Welcome Message -->
         <div class="message-bubble gemini-message">
             Hello! I'm your Itinerary Assistant. Ask me anything about your schedule, logistics, or general travel questions.
         </div>
-        <!-- Messages will be appended here -->
-    </div>
+        </div>
 
-    <!-- Chat Input -->
     <div id="chat-input-area" class="chat-input-area" style="display: none;">
         <input type="text" id="chat-input" placeholder="Ask about the itinerary or UK travel..."
                class="flex-grow p-3 border border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 mr-2 shadow-inner">
@@ -197,8 +188,9 @@
     const tabsContainer = document.getElementById('tabs-container');
     const contentContainer = document.getElementById('content-container');
 
-    // !!! UPDATED with the new public CSV URL !!!
-    const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRip3XVrk7VVTw8BTxJIFiEfr26jDhhuyMnGBDrB191c3wjVaz3DJ4ra4ZMrvXW0HbNAMl28rxMrqcB/pub?output=csv'; 
+    // !!! UPDATED to restrict the CSV export range to A:E to fix slow loading/deployment !!!
+    // This reduces the file size by ignoring thousands of empty rows/columns in the full sheet export.
+    const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRip3XVrk7VVTw8BTxJIFiEfr26jDhhuyMnGBDrB191c3wjVaz3DJ4ra4ZMrvXW0HbNAMl28rxMrqcB/pub?gid=0&range=A:E&output=csv'; 
 
     function showLoading(show) {
         loadingIndicator.style.display = show ? 'flex' : 'none';
