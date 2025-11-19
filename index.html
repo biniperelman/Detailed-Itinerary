@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gap Year Itinerary Dashboard</title>
+    <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         /* Custom styles for better aesthetics and fixed chat box */
@@ -29,6 +30,24 @@
         .activity-table tr:nth-child(even) {
             background-color: #f9fafb;
         }
+        /* New timeline styling */
+        .timeline-item {
+            border-left: 2px solid #d1d5db; /* gray-300 */
+            padding-left: 1.5rem;
+            position: relative;
+        }
+        .timeline-dot {
+            position: absolute;
+            left: -8px;
+            top: 0;
+            width: 16px;
+            height: 16px;
+            background-color: #10b981; /* Emerald 500 */
+            border: 3px solid white;
+            border-radius: 50%;
+            box-shadow: 0 0 0 2px #10b981;
+        }
+
         .chat-container {
             position: fixed;
             bottom: 20px;
@@ -106,25 +125,33 @@
     </header>
 
     <div id="tabs-container" class="flex flex-wrap justify-center gap-2 mb-8 p-4 bg-white rounded-xl shadow-md">
-        </div>
-
-    <div id="content-container" class="bg-white p-6 rounded-xl shadow-lg">
-        </div>
-</div>
-
-<div id="chat-box" class="chat-container">
-    <div id="chat-header" class="p-4 bg-emerald-500 text-white flex justify-between items-center rounded-t-xl cursor-pointer">
-        <h3 class="text-xl font-bold">Itinerary Assistant (Gemini)</h3>
-        <button id="toggle-chat-btn" class="text-2xl font-bold p-1 leading-none rounded-full hover:bg-emerald-400">+</button>
+        <!-- Tabs will be rendered here -->
     </div>
 
-    <div id="chat-messages" class="chat-messages" style="display: none;">
+    <div id="content-container" class="bg-white p-6 rounded-xl shadow-lg">
+        <!-- Timeline content will be rendered here -->
+    </div>
+</div>
+
+<!-- Gemini Chat Box -->
+<div id="chat-box" class="chat-container">
+    <!-- Chat Header -->
+    <div id="chat-header" class="p-4 bg-emerald-500 text-white flex justify-between items-center rounded-t-xl cursor-pointer">
+        <h3 class="text-xl font-bold">Itinerary Assistant (Gemini)</h3>
+        <button id="toggle-chat-btn" class="text-2xl font-bold p-1 leading-none rounded-full hover:bg-emerald-400">−</button>
+    </div>
+
+    <!-- Chat Messages -->
+    <div id="chat-messages" class="chat-messages">
+        <!-- Initial Welcome Message -->
         <div class="message-bubble gemini-message">
             Hello! I'm your Itinerary Assistant. Ask me anything about your schedule, logistics, or general travel questions.
         </div>
-        </div>
+        <!-- Messages will be appended here -->
+    </div>
 
-    <div id="chat-input-area" class="chat-input-area" style="display: none;">
+    <!-- Chat Input -->
+    <div id="chat-input-area" class="chat-input-area">
         <input type="text" id="chat-input" placeholder="Ask about the itinerary or UK travel..."
                class="flex-grow p-3 border border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 mr-2 shadow-inner">
         <button id="send-btn"
@@ -143,6 +170,7 @@
     // --- Global Variables (Provided by Canvas) ---
     const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
     const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+    // Initial Auth Token is a string (JWT), no JSON.parse() needed.
     const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
     const apiKey = ""; // Canvas provides the actual key at runtime
 
@@ -188,9 +216,8 @@
     const tabsContainer = document.getElementById('tabs-container');
     const contentContainer = document.getElementById('content-container');
 
-    // !!! UPDATED to restrict the CSV export range to A:E to fix slow loading/deployment !!!
-    // This reduces the file size by ignoring thousands of empty rows/columns in the full sheet export.
-    const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRip3XVrk7VVTw8BTxJIFiEfr26jDhhuyMnGBDrB191c3wjVaz3DJ4ra4ZMrvXW0HbNAMl28rxMrqcB/pub?gid=0&range=A:E&output=csv'; 
+    // FIX: Using the complete, published-to-web URL provided by the user
+    const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRip3XVrk7VVTw8BTxJIFiEfr26jDhhuyMnGBDrB191c3wjVaz3DJ4ra4ZMrvXW0HbNAMl28rxMrqcB/pub?gid=1836297205&single=true&output=csv'; 
 
     function showLoading(show) {
         loadingIndicator.style.display = show ? 'flex' : 'none';
@@ -236,9 +263,9 @@
 
 
     function renderTabs(data) {
-        // Find the most appropriate date header
+        // Find the most appropriate date/day header
         const allHeaders = Object.keys(data[0] || {});
-        const dateHeader = allHeaders.find(key => key.toLowerCase().includes('day') && key.toLowerCase().includes('date')) || allHeaders[0];
+        const dateHeader = allHeaders.find(key => key.toLowerCase().includes('date') || key.toLowerCase().includes('day')) || allHeaders[0];
 
         // Filter out empty/null values and get unique days
         const uniqueDays = [...new Set(data.map(item => item[dateHeader]).filter(d => d && d.trim()))];
@@ -259,7 +286,7 @@
         if (uniqueDays.length > 0) {
             renderContent(currentDay, dateHeader);
         } else {
-            contentContainer.innerHTML = '<p class="text-center text-gray-500 p-8">No itinerary data found or CSV is empty. Please check the "Day/Date" column header name.</p>';
+            contentContainer.innerHTML = '<p class="text-center text-gray-500 p-8">No itinerary data found or CSV is empty. Please check the spreadsheet headers, specifically for the "Day" or "Date" column.</p>';
         }
     }
 
@@ -274,6 +301,7 @@
         renderContent(day, dateHeader);
     }
 
+    // --- REWRITTEN: Render Content as a Timeline ---
     function renderContent(day, dateHeader) {
         const dayData = itineraryData.filter(item => item[dateHeader] === day);
         if (dayData.length === 0) {
@@ -281,36 +309,70 @@
             return;
         }
 
+        // Determine key column names for the timeline view
+        // Priority: Time, Activity/Event/Title, Location, Details/Description
         const headers = Object.keys(dayData[0]);
-        // Filter out the date header and only show 4 key columns for a clean view
-        const displayHeaders = headers.filter(h => h !== dateHeader).slice(0, 4); 
+        const timeHeader = headers.find(h => h.toLowerCase().includes('time')) || headers[1];
+        const activityHeader = headers.find(h => h.toLowerCase().includes('activity') || h.toLowerCase().includes('event') || h.toLowerCase().includes('title')) || headers[2];
+        const locationHeader = headers.find(h => h.toLowerCase().includes('location') || h.toLowerCase().includes('place')) || headers[3];
+        const detailsHeader = headers.find(h => h.toLowerCase().includes('details') || h.toLowerCase().includes('description')) || headers[4];
 
-        let tableHtml = `
-            <h2 class="text-2xl font-semibold text-gray-800 mb-6">${day} Activities</h2>
-            <div class="overflow-x-auto rounded-lg border border-gray-200">
-            <table class="min-w-full divide-y divide-gray-200 activity-table">
-                <thead class="bg-gray-50">
-                    <tr>
-                        ${displayHeaders.map(h => `<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">${h}</th>`).join('')}
-                    </tr>
-                </thead>
-                <tbody class="bg-white divide-y divide-gray-200">
+        let timelineHtml = `
+            <h2 class="text-3xl font-bold text-gray-800 mb-6">${day} Schedule</h2>
+            <div class="space-y-8 p-4 border-l border-gray-200">
         `;
-
+        
         dayData.forEach(item => {
-            tableHtml += '<tr>';
-            displayHeaders.forEach(header => {
-                tableHtml += `<td class="px-6 py-4 text-sm text-gray-700">${item[header] || '-'}</td>`;
-            });
-            tableHtml += '</tr>';
+            // Only render items with a valid activity name
+            if (!item[activityHeader] || item[activityHeader].trim() === '') return;
+
+            const time = item[timeHeader] || 'Time TBD';
+            const activity = item[activityHeader] || 'Unknown Activity';
+            const location = item[locationHeader];
+            const details = item[detailsHeader];
+
+            timelineHtml += `
+                <div class="timeline-item relative group pb-8 last:pb-0">
+                    <div class="timeline-dot"></div>
+                    
+                    <div class="bg-white p-4 sm:p-6 rounded-xl border border-gray-100 shadow-md transition duration-300 group-hover:shadow-lg">
+                        <div class="flex flex-col sm:flex-row sm:items-start justify-between">
+                            <!-- Time -->
+                            <div class="text-lg font-mono text-emerald-600 sm:w-1/4 mb-2 sm:mb-0">
+                                ${time}
+                            </div>
+                            
+                            <!-- Activity Content -->
+                            <div class="sm:w-3/4">
+                                <h3 class="text-xl font-semibold text-gray-900 mb-1">${activity}</h3>
+                                
+                                <!-- Location/Category -->
+                                ${location ? `
+                                    <p class="text-sm text-gray-500 mb-2 flex items-center">
+                                        <svg class="w-4 h-4 mr-1 text-red-400" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd"></path></svg>
+                                        ${location}
+                                    </p>
+                                ` : ''}
+
+                                <!-- Details/Description -->
+                                ${details ? `
+                                    <p class="text-base text-gray-700 mt-2">
+                                        ${details.replace(/\n/g, '<br>')}
+                                    </p>
+                                ` : ''}
+                                
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
         });
 
-        tableHtml += `
-                </tbody>
-            </table>
+        timelineHtml += `
             </div>
         `;
-        contentContainer.innerHTML = tableHtml;
+        
+        contentContainer.innerHTML = timelineHtml;
     }
 
     async function loadItinerary() {
@@ -318,14 +380,16 @@
         try {
             const response = await fetch(csvUrl);
             if (!response.ok) {
-                const errorMessage = `Error loading itinerary data: HTTP error! status: ${response.status}. Please check the CSV link and ensure it is published correctly.`;
+                // Customized error message to reflect the attempt to use the published URL
+                const errorMessage = `Error loading itinerary data: HTTP error! status: ${response.status}. 
+                We are using the 'Publish to web' URL, but it returned an error. Please double-check the URL is correct and the sheet is still published as CSV.`;
                 throw new Error(errorMessage);
             }
             const csvText = await response.text();
             itineraryData = parseCSV(csvText);
             
             if (itineraryData.length === 0) {
-                 throw new Error("The CSV file is empty or contains no detectable data. Please check your spreadsheet content.");
+                 throw new Error("The CSV file is empty or contains no detectable data. Please check your spreadsheet content and confirm the URL.");
             }
 
             renderTabs(itineraryData);
@@ -347,14 +411,22 @@
     const chatInputArea = document.getElementById('chat-input-area');
     const toggleChatBtn = document.getElementById('toggle-chat-btn');
 
-    let isChatOpen = false;
-
-    // Set initial state to collapsed (not open) and adjust content/button text
+    let isChatOpen = true; // Initial state is open by default
+    
+    // Set initial state of chat box
     function setInitialChatState() {
-        // We set to open=false and run toggleChat to achieve the initial closed state,
-        // which correctly sets the class and visibility.
-        isChatOpen = true; 
-        toggleChat(); 
+        if (isChatOpen) {
+            chatBox.classList.add('open');
+            chatMessages.style.display = 'flex';
+            chatInputArea.style.display = 'flex';
+            toggleChatBtn.textContent = '−';
+            setTimeout(() => scrollToBottom(), 10); 
+        } else {
+            chatBox.classList.remove('open');
+            chatMessages.style.display = 'none';
+            chatInputArea.style.display = 'none';
+            toggleChatBtn.textContent = '+';
+        }
     }
     
     // Toggle chat box visibility
