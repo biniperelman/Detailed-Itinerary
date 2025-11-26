@@ -11,7 +11,6 @@
         body {
             font-family: 'Inter', sans-serif;
             background-color: #f7f7f7;
-            /* No padding-bottom needed as the chat box is gone */
         }
         .container {
             max-width: 1200px;
@@ -23,12 +22,6 @@
             color: white;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
             transform: translateY(-1px);
-        }
-        .activity-table th {
-            background-color: #f3f4f6;
-        }
-        .activity-table tr:nth-child(even) {
-            background-color: #f9fafb;
         }
         /* Timeline styling */
         .timeline-item {
@@ -54,7 +47,7 @@
 <div id="loadingIndicator" class="fixed inset-0 bg-white bg-opacity-75 flex items-center justify-center z-50">
     <div class="flex flex-col items-center">
         <div class="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-emerald-500"></div>
-        <p class="mt-4 text-emerald-600 font-semibold">Loading Itinerary Data...</p>
+        <p class="mt-4 text-emerald-600 font-semibold">Loading Itinerary Data from Google Sheets...</p>
     </div>
 </div>
 
@@ -65,7 +58,11 @@
     </header>
 
     <div id="tabs-container" class="flex flex-wrap justify-center gap-2 mb-8 p-4 bg-white rounded-xl shadow-md">
-        <!-- Tabs will be rendered here -->
+        <!-- Day Tabs will be rendered here -->
+    </div>
+
+    <div id="filters-container" class="flex flex-wrap gap-4 mb-6 p-4 bg-white rounded-xl shadow-md">
+        <!-- Filters will be rendered here (now as dropdowns) -->
     </div>
 
     <div id="content-container" class="bg-white p-6 rounded-xl shadow-lg">
@@ -84,8 +81,6 @@
     const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
     const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
     
-    // NOTE: The GEMINI_PROXY_URL and all chat logic have been removed.
-
     // --- Firebase Initialization ---
     let app, db, auth;
     if (Object.keys(firebaseConfig).length > 0) {
@@ -123,13 +118,28 @@
     // --- Core Itinerary Logic ---
     let itineraryData = [];
     let currentDay = '';
+    let activeFilters = { staff: 'All', group: 'All' }; // State for filters
+    
+    // Define staff assignments that should always be visible regardless of specific staff filter
+    const MANDATORY_STAFF_ASSIGNMENTS = ['All Staff', 'UK Staff']; 
 
     const loadingIndicator = document.getElementById('loadingIndicator');
     const tabsContainer = document.getElementById('tabs-container');
     const contentContainer = document.getElementById('content-container');
+    const filtersContainer = document.getElementById('filters-container'); 
 
-    // FIX: Using the complete, published-to-web URL provided by the user
+    // RESTORED: Fetching from the Google Sheet CSV export URL provided by the user
     const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRip3XVrk7VVTw8BTxJIFiEfr26jDhhuyMnGBDrB191c3wjVaz3DJ4ra4ZMrvXW0HbNAMl28rxMrqcB/pub?gid=1836297205&single=true&output=csv'; 
+
+    // Cached column headers 
+    let dateHeader = 'Day/Date';
+    let timeHeader = 'Time';
+    let activityHeader = 'Activity';
+    let locationHeader = 'Location';
+    let detailsHeader = 'Logistics';
+    let staffHeader = 'Staff Allocation';
+    let groupHeader = 'Group Applicable';
+
 
     function showLoading(show) {
         loadingIndicator.style.display = show ? 'flex' : 'none';
@@ -137,7 +147,6 @@
 
     function parseCSV(text) {
         const lines = text.trim().split('\n');
-        // Handle potential empty or short CSV
         if (lines.length <= 1) return [];
 
         // Simple split for headers, removing quotes
@@ -149,7 +158,6 @@
             if (!line) continue;
 
             // Regex to split by comma, but ignore commas inside double quotes
-            // This is a robust way to handle cells with commas inside them (which are usually quoted)
             const row = line.match(/(".*?"|[^",\r\n]+)(?=\s*,|\s*$)/g) || [];
             
             // Clean up row content and match lengths
@@ -158,7 +166,6 @@
             if (cleanedRow.length > 0 && cleanedRow.length >= headers.length) {
                 const item = {};
                 headers.forEach((header, index) => {
-                    // Use index to match data to headers, even if the data row is longer
                     if (cleanedRow[index] !== undefined) {
                         item[header] = cleanedRow[index];
                     } else {
@@ -174,12 +181,19 @@
     }
 
 
-    function renderTabs(data) {
-        // Find the most appropriate date/day header
-        const allHeaders = Object.keys(data[0] || {});
-        const dateHeader = allHeaders.find(key => key.toLowerCase().includes('date') || key.toLowerCase().includes('day')) || allHeaders[0];
+    function determineHeaders(data) {
+        if (data.length === 0) return;
+        const allHeaders = Object.keys(data[0]);
+        dateHeader = allHeaders.find(key => key.toLowerCase().includes('date') || key.toLowerCase().includes('day')) || allHeaders[0];
+        timeHeader = allHeaders.find(h => h.toLowerCase().includes('time')) || allHeaders[1];
+        activityHeader = allHeaders.find(h => h.toLowerCase().includes('activity') || h.toLowerCase().includes('event') || h.toLowerCase().includes('title')) || allHeaders[2];
+        locationHeader = allHeaders.find(h => h.toLowerCase().includes('location') || h.toLowerCase().includes('place')) || allHeaders[3];
+        detailsHeader = allHeaders.find(h => h.toLowerCase().includes('logistics') || h.toLowerCase().includes('details') || h.toLowerCase().includes('description')) || allHeaders[4];
+        staffHeader = allHeaders.find(h => h.toLowerCase().includes('staff allocation')) || '';
+        groupHeader = allHeaders.find(h => h.toLowerCase().includes('group applicable')) || '';
+    }
 
-        // Filter out empty/null values and get unique days
+    function renderTabs(data) {
         const uniqueDays = [...new Set(data.map(item => item[dateHeader]).filter(d => d && d.trim()))];
         tabsContainer.innerHTML = '';
 
@@ -187,7 +201,7 @@
             const button = document.createElement('button');
             button.className = 'tab-button px-4 py-2 text-sm font-medium rounded-full transition duration-150 hover:bg-emerald-100 hover:text-emerald-700 text-gray-700 bg-white shadow-sm';
             button.textContent = day;
-            button.onclick = () => switchDay(day, dateHeader);
+            button.onclick = () => switchDay(day);
             tabsContainer.appendChild(button);
 
             if (index === 0) {
@@ -196,13 +210,14 @@
             }
         });
         if (uniqueDays.length > 0) {
-            renderContent(currentDay, dateHeader);
+            renderFilters(data); // Render filters after loading and setting headers
+            renderContent(currentDay);
         } else {
             contentContainer.innerHTML = '<p class="text-center text-gray-500 p-8">No itinerary data found or CSV is empty. Please check the spreadsheet headers, specifically for the "Day" or "Date" column.</p>';
         }
     }
 
-    function switchDay(day, dateHeader) {
+    function switchDay(day) {
         currentDay = day;
         document.querySelectorAll('.tab-button').forEach(btn => {
             btn.classList.remove('active');
@@ -210,38 +225,141 @@
                 btn.classList.add('active');
             }
         });
-        renderContent(day, dateHeader);
+        // Reset filters when switching days
+        activeFilters = { staff: 'All', group: 'All' };
+        renderFilters(itineraryData); 
+        renderContent(day);
+    }
+    
+    function filterData(data) {
+        return data.filter(item => {
+            // Filter by Staff
+            if (activeFilters.staff !== 'All') {
+                const requiredStaff = activeFilters.staff;
+                const itemStaffRaw = item[staffHeader] || '';
+                // Split staff allocation by '/' and trim
+                const itemStaffList = itemStaffRaw.split('/').map(s => s.trim());
+
+                // Check 1: Does the activity explicitly include the selected staff member?
+                const isExplicitlyAssigned = itemStaffList.includes(requiredStaff);
+
+                // Check 2: Is the activity assigned to a mandatory, catch-all group?
+                const isMandatoryAssignment = MANDATORY_STAFF_ASSIGNMENTS.some(mandatory => 
+                    itemStaffList.includes(mandatory)
+                );
+                
+                // The item passes the staff filter if it's explicitly assigned to the staff, OR
+                // if it's assigned to a mandatory, all-staff group (to prevent staff from missing team tasks).
+                if (!isExplicitlyAssigned && !isMandatoryAssignment) {
+                    return false;
+                }
+            }
+            
+            // Filter by Group (Group logic remains the same)
+            if (activeFilters.group !== 'All') {
+                const itemGroup = item[groupHeader] || '';
+                // Check if the item's group applicable matches the active group filter
+                if (itemGroup.trim() !== activeFilters.group) {
+                    return false;
+                }
+            }
+
+            return true;
+        });
+    }
+    
+    // New handler for dropdown change event
+    function handleFilterChange(event, type) {
+        const value = event.target.value;
+        activeFilters[type] = value;
+        // Re-render content with new filters applied
+        renderContent(currentDay); 
+    }
+    window.handleFilterChange = handleFilterChange; // Expose globally
+
+    function getUniqueValues(data, header) {
+        if (!header) return [];
+        const values = data.map(item => item[header]).filter(v => v && v.trim());
+        // For Staff, split by '/' to handle multiple allocations (e.g., Gava / Josh)
+        if (header === staffHeader) {
+            const allStaff = values.flatMap(v => v.split('/').map(s => s.trim()));
+            return [...new Set(allStaff)].sort();
+        }
+        return [...new Set(values)].sort();
+    }
+    
+    // Helper to create a dropdown menu HTML structure
+    function createDropdown(type, label, values) {
+        const currentActive = activeFilters[type];
+        
+        let html = `<div class="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+            <label for="${type}-filter" class="font-semibold text-gray-700">${label}:</label>
+            <select id="${type}-filter" 
+                    onchange="window.handleFilterChange(event, '${type}')" 
+                    class="p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-emerald-500 focus:border-emerald-500 bg-white text-gray-800 w-full sm:w-auto min-w-[150px]">
+                <option value="All" ${currentActive === 'All' ? 'selected' : ''}>-- All ${label} --</option>`;
+        
+        values.forEach(value => {
+            if (value && value.trim()) {
+                 html += `<option value="${value}" ${currentActive === value ? 'selected' : ''}>${value}</option>`;
+            }
+        });
+
+        html += `</select></div>`;
+        return html;
     }
 
-    // --- REWRITTEN: Render Content as a Timeline ---
-    function renderContent(day, dateHeader) {
-        const dayData = itineraryData.filter(item => item[dateHeader] === day);
-        if (dayData.length === 0) {
-            contentContainer.innerHTML = `<p class="text-center text-gray-500 p-8">No activities scheduled for ${day}.</p>`;
-            return;
+
+    function renderFilters(data) {
+        filtersContainer.innerHTML = '';
+        const dayData = data.filter(item => item[dateHeader] === currentDay);
+
+        const staffValues = getUniqueValues(dayData, staffHeader);
+        const groupValues = getUniqueValues(dayData, groupHeader);
+        
+        let filterHtml = '<div class="flex flex-col md:flex-row w-full gap-4">';
+        
+        // Staff Filter Dropdown
+        if (staffValues.length > 0) {
+            filterHtml += createDropdown('staff', 'Staff Allocation', staffValues);
         }
 
-        // Determine key column names for the timeline view
-        // Priority: Time, Activity/Event/Title, Location, Details/Description
-        const headers = Object.keys(dayData[0]);
-        const timeHeader = headers.find(h => h.toLowerCase().includes('time')) || headers[1];
-        const activityHeader = headers.find(h => h.toLowerCase().includes('activity') || h.toLowerCase().includes('event') || h.toLowerCase().includes('title')) || headers[2];
-        const locationHeader = headers.find(h => h.toLowerCase().includes('location') || h.toLowerCase().includes('place')) || headers[3];
-        const detailsHeader = headers.find(h => h.toLowerCase().includes('details') || h.toLowerCase().includes('description')) || headers[4];
+        // Group Filter Dropdown
+        if (groupValues.length > 0) {
+            filterHtml += createDropdown('group', 'Group Applicable', groupValues);
+        }
+
+        filterHtml += '</div>';
+        filtersContainer.innerHTML = filterHtml;
+    }
+
+
+    function renderContent(day) {
+        let dayData = itineraryData.filter(item => item[dateHeader] === day);
+        
+        // Apply Filters
+        const filteredData = filterData(dayData);
+
+        if (filteredData.length === 0) {
+            contentContainer.innerHTML = `<p class="text-center text-gray-500 font-semibold p-8">No activities scheduled for ${day} matching the current filters.</p>`;
+            return;
+        }
 
         let timelineHtml = `
             <h2 class="text-3xl font-bold text-gray-800 mb-6">${day} Schedule</h2>
             <div class="space-y-8 p-4 border-l border-gray-200">
         `;
         
-        dayData.forEach(item => {
+        filteredData.forEach(item => {
             // Only render items with a valid activity name
             if (!item[activityHeader] || item[activityHeader].trim() === '') return;
 
             const time = item[timeHeader] || 'Time TBD';
             const activity = item[activityHeader] || 'Unknown Activity';
             const location = item[locationHeader];
-            const details = item[detailsHeader];
+            const details = detailsHeader ? item[detailsHeader] : '';
+            const staff = staffHeader ? item[staffHeader] : '';
+            const group = groupHeader ? item[groupHeader] : '';
 
             timelineHtml += `
                 <div class="timeline-item relative group pb-8 last:pb-0">
@@ -266,10 +384,16 @@
                                     </p>
                                 ` : ''}
 
-                                <!-- Details/Description -->
+                                <!-- Staff and Group Tags -->
+                                <div class="flex flex-wrap gap-2 mt-2">
+                                    ${staff ? `<span class="px-3 py-1 text-xs font-semibold text-sky-700 bg-sky-100 rounded-full">Staff: ${staff}</span>` : ''}
+                                    ${group ? `<span class="px-3 py-1 text-xs font-semibold text-purple-700 bg-purple-100 rounded-full">Group: ${group}</span>` : ''}
+                                </div>
+                                
+                                <!-- Details/Logistics -->
                                 ${details ? `
-                                    <p class="text-base text-gray-700 mt-2">
-                                        ${details.replace(/\n/g, '<br>')}
+                                    <p class="text-base text-gray-700 mt-3 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                                        <span class="font-medium text-gray-600">Logistics:</span> ${details.replace(/\n/g, '<br>')}
                                     </p>
                                 ` : ''}
                                 
@@ -292,18 +416,19 @@
         try {
             const response = await fetch(csvUrl);
             if (!response.ok) {
-                // Customized error message to reflect the attempt to use the published URL
                 const errorMessage = `Error loading itinerary data: HTTP error! status: ${response.status}. 
-                We are using the 'Publish to web' URL, but it returned an error. Please double-check the URL is correct and the sheet is still published as CSV.`;
+                Please ensure the Google Sheet is published to the web as a CSV file and the URL is correct. The current URL might be invalid.`;
                 throw new Error(errorMessage);
             }
             const csvText = await response.text();
             itineraryData = parseCSV(csvText);
             
             if (itineraryData.length === 0) {
-                 throw new Error("The CSV file is empty or contains no detectable data. Please check your spreadsheet content and confirm the URL.");
+                 throw new Error("The fetched CSV file is empty or contains no detectable data. Please check your spreadsheet content.");
             }
 
+            // Determine headers once after loading data
+            determineHeaders(itineraryData);
             renderTabs(itineraryData);
         } catch (error) {
             console.error('Failed to load CSV:', error);
