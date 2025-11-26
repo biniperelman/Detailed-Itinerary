@@ -40,6 +40,18 @@
             border-radius: 50%;
             box-shadow: 0 0 0 2px #10b981;
         }
+        /* Collapsible section transition */
+        .further-details-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out, padding 0.3s ease-out;
+        }
+        .further-details-content.open {
+            max-height: 500px; /* Arbitrarily large value to allow content */
+            padding-top: 0.5rem;
+            padding-bottom: 0.5rem;
+            transition: max-height 0.5s ease-in, padding 0.5s ease-in;
+        }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -55,6 +67,7 @@
     <header class="text-center mb-10 p-6 bg-white shadow-lg rounded-xl">
         <h1 class="text-4xl font-extrabold text-gray-800">Gap Year UK Itinerary</h1>
         <p class="text-lg text-gray-500 mt-2">Interactive Daily Schedule & Logistics</p>
+        <div id="last-updated" class="text-xs text-gray-400 mt-2"></div>
     </header>
 
     <div id="tabs-container" class="flex flex-wrap justify-center gap-2 mb-8 p-4 bg-white rounded-xl shadow-md">
@@ -121,38 +134,77 @@
     let activeFilters = { staff: 'All', group: 'All' }; // State for filters
     
     // Define staff assignments that should always be visible regardless of specific staff filter
-    const MANDATORY_STAFF_ASSIGNMENTS = ['All Staff', 'UK Staff']; 
+    const MANDATORY_STAFF_ASSIGNMENTS = ['All Staff', 'UK Staff'];	
 
     const loadingIndicator = document.getElementById('loadingIndicator');
     const tabsContainer = document.getElementById('tabs-container');
     const contentContainer = document.getElementById('content-container');
-    const filtersContainer = document.getElementById('filters-container'); 
+    const filtersContainer = document.getElementById('filters-container');	
+    const lastUpdatedElement = document.getElementById('last-updated');
 
     // RESTORED: Fetching from the Google Sheet CSV export URL provided by the user
-    const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRip3XVrk7VVTw8BTxJIFiEfr26jDhhuyMnGBDrB191c3wjVaz3DJ4ra4ZMrvXW0HbNAMl28rxMrqcB/pub?gid=1836297205&single=true&output=csv'; 
+    // This URL provides the live, published version of the spreadsheet.
+    const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRip3XVrk7VVTw8BTxJIFiEfr26jDhhuyMnGBDrB191c3wjVaz3DJ4ra4ZMrvXW0HbNAMl28rxMrqcB/pub?gid=1836297205&single=true&output=csv';	
 
-    // Cached column headers 
+    // Cached column headers (These are the desired, correct headers)
     let dateHeader = 'Day/Date';
     let timeHeader = 'Time';
     let activityHeader = 'Activity';
     let locationHeader = 'Location';
     let detailsHeader = 'Logistics';
+    let extraDetailsHeader = 'Further Details'; 
     let staffHeader = 'Staff Allocation';
     let groupHeader = 'Group Applicable';
 
+    const FALLBACK_HEADERS = [
+        dateHeader, timeHeader, activityHeader, locationHeader, detailsHeader, staffHeader, groupHeader, extraDetailsHeader
+    ];
 
     function showLoading(show) {
         loadingIndicator.style.display = show ? 'flex' : 'none';
     }
 
+    // Function to handle the toggle of further details (exposed globally)
+    window.toggleDetails = (activityId) => {
+        const contentElement = document.getElementById(`details-content-${activityId}`);
+        const buttonElement = document.getElementById(`details-button-${activityId}`);
+        if (contentElement) {
+            const isOpen = contentElement.classList.toggle('open');
+            
+            // Update button icon
+            const icon = buttonElement.querySelector('svg');
+            if (icon) {
+                icon.innerHTML = isOpen 
+                    ? '<path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7" />' // Chevron up
+                    : '<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />'; // Chevron down
+            }
+        }
+    };
+
+
     function parseCSV(text) {
         const lines = text.trim().split('\n');
         if (lines.length <= 1) return [];
 
-        // Simple split for headers, removing quotes
-        const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+        // 1. Try to parse headers normally
+        const initialHeaders = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+        let headers = initialHeaders;
+        
+        // 2. Check for merged header problem
+        // If we detect 4 or fewer columns, but the first column name is very long, 
+        // we assume the header row is mashed up and use the FALLBACK_HEADERS.
+        if (headers.length <= 4 && headers[0].length > 30) {
+            console.warn("Detected likely merged header issue. Overriding headers with fallback.");
+            headers = FALLBACK_HEADERS;
+        } else {
+            // If normal headers are found, we'll use them, but we still map our target headers for safety
+            console.log("Using detected headers:", headers);
+            // This is handled in determineHeaders, but logging here helps debug the parser.
+        }
+
         const data = [];
 
+        // Start processing from the first data line (index 1)
         for (let i = 1; i < lines.length; i++) {
             const line = lines[i].trim();
             if (!line) continue;
@@ -163,8 +215,10 @@
             // Clean up row content and match lengths
             const cleanedRow = row.map(c => c.trim().replace(/^"|"$/g, ''));
             
-            if (cleanedRow.length > 0 && cleanedRow.length >= headers.length) {
+            if (cleanedRow.length > 0) {
                 const item = {};
+                
+                // Use the detected or fallback headers
                 headers.forEach((header, index) => {
                     if (cleanedRow[index] !== undefined) {
                         item[header] = cleanedRow[index];
@@ -173,8 +227,6 @@
                     }
                 });
                 data.push(item);
-            } else if (cleanedRow.some(c => c.length > 0)) {
-                console.warn(`Skipping malformed row ${i + 1}: ${line}`);
             }
         }
         return data.filter(item => Object.values(item).some(v => v)); // Filter out completely empty rows
@@ -184,18 +236,55 @@
     function determineHeaders(data) {
         if (data.length === 0) return;
         const allHeaders = Object.keys(data[0]);
-        dateHeader = allHeaders.find(key => key.toLowerCase().includes('date') || key.toLowerCase().includes('day')) || allHeaders[0];
-        timeHeader = allHeaders.find(h => h.toLowerCase().includes('time')) || allHeaders[1];
-        activityHeader = allHeaders.find(h => h.toLowerCase().includes('activity') || h.toLowerCase().includes('event') || h.toLowerCase().includes('title')) || allHeaders[2];
-        locationHeader = allHeaders.find(h => h.toLowerCase().includes('location') || h.toLowerCase().includes('place')) || allHeaders[3];
-        detailsHeader = allHeaders.find(h => h.toLowerCase().includes('logistics') || h.toLowerCase().includes('details') || h.toLowerCase().includes('description')) || allHeaders[4];
-        staffHeader = allHeaders.find(h => h.toLowerCase().includes('staff allocation')) || '';
-        groupHeader = allHeaders.find(h => h.toLowerCase().includes('group applicable')) || '';
+
+        // If we used fallback headers, they are already set and we just confirm existence
+        const isFallbackActive = allHeaders.some(h => FALLBACK_HEADERS.includes(h));
+
+        if (!isFallbackActive) {
+            // Original logic to find dynamic headers if fallback wasn't triggered
+            const dateKeywords = ['day', 'date', 'weekday'];
+            const dateContentRegex = /(monday|tuesday|wednesday|thursday|friday|saturday|sunday|january|february|march|april|may|june|july|august|september|october|november|december)/i;
+            
+            let foundDateHeader = allHeaders.find((header) => {
+                if (dateKeywords.some(keyword => header.toLowerCase().includes(keyword))) return true;
+                for (let i = 0; i < Math.min(data.length, 10); i++) {
+                    const content = data[i][header] || '';
+                    if (content.trim() !== '' && dateContentRegex.test(content)) return true;
+                }
+                return false;
+            });
+            dateHeader = foundDateHeader || allHeaders[0];
+
+            timeHeader = allHeaders.find(h => h.toLowerCase().includes('time')) || '';
+            activityHeader = allHeaders.find(h => h.toLowerCase().includes('activity') || h.toLowerCase().includes('event') || h.toLowerCase().includes('title')) || '';
+            locationHeader = allHeaders.find(h => h.toLowerCase().includes('location') || h.toLowerCase().includes('place')) || '';
+            detailsHeader = allHeaders.find(h => h.toLowerCase().includes('logistics')) || allHeaders.find(h => h.toLowerCase().includes('details') || h.toLowerCase().includes('description')) || '';
+            extraDetailsHeader = allHeaders.find(h => h.toLowerCase().includes('further details') || h.toLowerCase().includes('extra details')) || allHeaders.find(h => (h !== detailsHeader && h.toLowerCase().includes('notes'))) || ''; 
+            staffHeader = allHeaders.find(h => h.toLowerCase().includes('staff allocation')) || '';
+            groupHeader = allHeaders.find(h => h.toLowerCase().includes('group applicable')) || '';
+        }
+        
+        console.log("Mapped Final Headers:", {dateHeader, timeHeader, activityHeader, locationHeader, detailsHeader, extraDetailsHeader, staffHeader, groupHeader});
     }
 
     function renderTabs(data) {
-        const uniqueDays = [...new Set(data.map(item => item[dateHeader]).filter(d => d && d.trim()))];
+        // Collect all non-empty, unique day entries from the determined dateHeader column
+        const uniqueDays = [];
+        data.forEach(item => {
+            const day = item[dateHeader] ? item[dateHeader].trim() : '';
+            
+            // Only add the day if it's not empty and not already in the list
+            if (day && !uniqueDays.includes(day)) {
+                uniqueDays.push(day);
+            }
+        });
+
         tabsContainer.innerHTML = '';
+
+        if (uniqueDays.length === 0) {
+            contentContainer.innerHTML = '<p class="text-center text-gray-500 p-8">No itinerary data found. Please ensure the Day/Date column is filled in your spreadsheet.</p>';
+            return;
+        }
 
         uniqueDays.forEach((day, index) => {
             const button = document.createElement('button');
@@ -204,17 +293,15 @@
             button.onclick = () => switchDay(day);
             tabsContainer.appendChild(button);
 
+            // Set the first non-empty unique day as the current day
             if (index === 0) {
                 currentDay = day;
                 button.classList.add('active');
             }
         });
-        if (uniqueDays.length > 0) {
-            renderFilters(data); // Render filters after loading and setting headers
-            renderContent(currentDay);
-        } else {
-            contentContainer.innerHTML = '<p class="text-center text-gray-500 p-8">No itinerary data found or CSV is empty. Please check the spreadsheet headers, specifically for the "Day" or "Date" column.</p>';
-        }
+        
+        renderFilters(data); 
+        renderContent(currentDay);
     }
 
     function switchDay(day) {
@@ -227,7 +314,7 @@
         });
         // Reset filters when switching days
         activeFilters = { staff: 'All', group: 'All' };
-        renderFilters(itineraryData); 
+        renderFilters(itineraryData);	
         renderContent(day);
     }
     
@@ -244,7 +331,7 @@
                 const isExplicitlyAssigned = itemStaffList.includes(requiredStaff);
 
                 // Check 2: Is the activity assigned to a mandatory, catch-all group?
-                const isMandatoryAssignment = MANDATORY_STAFF_ASSIGNMENTS.some(mandatory => 
+                const isMandatoryAssignment = MANDATORY_STAFF_ASSIGNMENTS.some(mandatory =>	
                     itemStaffList.includes(mandatory)
                 );
                 
@@ -273,7 +360,7 @@
         const value = event.target.value;
         activeFilters[type] = value;
         // Re-render content with new filters applied
-        renderContent(currentDay); 
+        renderContent(currentDay);	
     }
     window.handleFilterChange = handleFilterChange; // Expose globally
 
@@ -294,14 +381,14 @@
         
         let html = `<div class="flex flex-col sm:flex-row items-start sm:items-center gap-2">
             <label for="${type}-filter" class="font-semibold text-gray-700">${label}:</label>
-            <select id="${type}-filter" 
-                    onchange="window.handleFilterChange(event, '${type}')" 
+            <select id="${type}-filter"	
+                    onchange="window.handleFilterChange(event, '${type}')"	
                     class="p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-emerald-500 focus:border-emerald-500 bg-white text-gray-800 w-full sm:w-auto min-w-[150px]">
                 <option value="All" ${currentActive === 'All' ? 'selected' : ''}>-- All ${label} --</option>`;
         
         values.forEach(value => {
             if (value && value.trim()) {
-                 html += `<option value="${value}" ${currentActive === value ? 'selected' : ''}>${value}</option>`;
+                html += `<option value="${value}" ${currentActive === value ? 'selected' : ''}>${value}</option>`;
             }
         });
 
@@ -335,13 +422,14 @@
 
 
     function renderContent(day) {
+        // Filter data to only show activities for the selected day
         let dayData = itineraryData.filter(item => item[dateHeader] === day);
         
-        // Apply Filters
+        // Apply Filters (Staff/Group)
         const filteredData = filterData(dayData);
 
         if (filteredData.length === 0) {
-            contentContainer.innerHTML = `<p class="text-center text-gray-500 font-semibold p-8">No activities scheduled for ${day} matching the current filters.</p>`;
+            contentContainer.innerHTML = `<p class="text-center text-gray-500 font-semibold p-8">No activities scheduled for "${day}" matching the current filters.</p>`;
             return;
         }
 
@@ -350,16 +438,27 @@
             <div class="space-y-8 p-4 border-l border-gray-200">
         `;
         
-        filteredData.forEach(item => {
+        filteredData.forEach((item, index) => {
             // Only render items with a valid activity name
             if (!item[activityHeader] || item[activityHeader].trim() === '') return;
 
             const time = item[timeHeader] || 'Time TBD';
             const activity = item[activityHeader] || 'Unknown Activity';
             const location = item[locationHeader];
-            const details = detailsHeader ? item[detailsHeader] : '';
+            const logistics = detailsHeader ? item[detailsHeader] : ''; 
+            const extraDetailsRaw = extraDetailsHeader ? item[extraDetailsHeader] : '';
+            const extraDetails = extraDetailsRaw.trim(); // Use trimmed value for checks
             const staff = staffHeader ? item[staffHeader] : '';
             const group = groupHeader ? item[groupHeader] : '';
+            
+            // Unique ID for the collapsible elements
+            const activityId = `${day.replace(/[^a-zA-Z0-9]/g, '')}-${index}`;
+
+            // Determine button state and color
+            const hasExtraDetails = extraDetails.length > 0;
+            const buttonColor = hasExtraDetails ? 'bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700' : 'bg-gray-300 cursor-not-allowed';
+            const buttonDisabled = hasExtraDetails ? '' : 'disabled';
+            const buttonText = hasExtraDetails ? 'Further Details' : 'No Extra Details';
 
             timelineHtml += `
                 <div class="timeline-item relative group pb-8 last:pb-0">
@@ -390,13 +489,32 @@
                                     ${group ? `<span class="px-3 py-1 text-xs font-semibold text-purple-700 bg-purple-100 rounded-full">Group: ${group}</span>` : ''}
                                 </div>
                                 
-                                <!-- Details/Logistics -->
-                                ${details ? `
+                                <!-- Logistics (Primary Details) -->
+                                ${logistics ? `
                                     <p class="text-base text-gray-700 mt-3 p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                                        <span class="font-medium text-gray-600">Logistics:</span> ${details.replace(/\n/g, '<br>')}
+                                        <span class="font-medium text-gray-600">Logistics:</span> ${logistics.replace(/\n/g, '<br>')}
                                     </p>
                                 ` : ''}
                                 
+                                <!-- Further Details Button (Interactive) -->
+                                <button id="details-button-${activityId}"
+                                    onclick="${hasExtraDetails ? `window.toggleDetails('${activityId}')` : ''}"
+                                    ${buttonDisabled}
+                                    class="mt-3 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-full shadow-sm text-white transition duration-150 ease-in-out ${buttonColor} focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500">
+                                    ${buttonText}
+                                    <svg class="w-4 h-4 ml-2 -mr-1" id="icon-${activityId}" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                </button>
+
+                                <!-- Further Details Content (Collapsible) -->
+                                <div id="details-content-${activityId}" class="further-details-content">
+                                    <!-- Using yellow background for visibility of secondary info -->
+                                    <div class="text-sm text-gray-600 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                                        <span class="font-bold text-yellow-700 block mb-1">Further Details:</span> 
+                                        ${extraDetails.replace(/\n/g, '<br>')}
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -414,12 +532,27 @@
     async function loadItinerary() {
         showLoading(true);
         try {
-            const response = await fetch(csvUrl);
-            if (!response.ok) {
-                const errorMessage = `Error loading itinerary data: HTTP error! status: ${response.status}. 
-                Please ensure the Google Sheet is published to the web as a CSV file and the URL is correct. The current URL might be invalid.`;
-                throw new Error(errorMessage);
+            // Using exponential backoff for robustness
+            const maxRetries = 3;
+            let response;
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    response = await fetch(csvUrl);
+                    if (response.ok) break; // Success
+                    if (i === maxRetries - 1) {
+                         const errorMessage = `Error loading itinerary data: HTTP error! status: ${response.status}. 
+                            Please ensure the Google Sheet is published to the web as a CSV file and the URL is correct. The current URL might be invalid.`;
+                        throw new Error(errorMessage);
+                    }
+                    // Wait before retrying
+                    await new Promise(resolve => setTimeout(resolve, Math.pow(2, i) * 1000));
+                } catch (e) {
+                    if (i === maxRetries - 1) throw e;
+                    await new Promise(resolve => setTimeout(resolve, Math.pow(2, i) * 1000));
+                }
             }
+
+
             const csvText = await response.text();
             itineraryData = parseCSV(csvText);
             
@@ -429,7 +562,12 @@
 
             // Determine headers once after loading data
             determineHeaders(itineraryData);
+            
             renderTabs(itineraryData);
+            
+            // Update the last updated timestamp
+            lastUpdatedElement.textContent = `Last data sync: ${new Date().toLocaleTimeString()}`;
+
         } catch (error) {
             console.error('Failed to load CSV:', error);
             contentContainer.innerHTML = `<p class="text-center text-red-500 font-semibold p-8">${error.message}</p>`;
